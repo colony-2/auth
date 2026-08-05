@@ -10,9 +10,11 @@ import { decodeCompactScopeClaim } from "./claims";
 
 export interface AuthnRepository {
   findIdentityByUsername(username: string): Promise<Identity | undefined>;
+  findIdentityByExternal(provider: string, externalSubject: string): Promise<Identity | undefined>;
   getIdentityBySubject(subjectId: string): Promise<Identity | undefined>;
   putIdentity(identity: Identity): Promise<void>;
   getSubject(subjectId: string): Promise<Subject | undefined>;
+  findSubjectByEmail(email: string): Promise<Subject | undefined>;
   putSubject(subject: Subject): Promise<void>;
   listServiceAccountCredentials(subjectId: string): Promise<ServiceAccountCredential[]>;
   putServiceAccountCredential(credential: ServiceAccountCredential): Promise<void>;
@@ -34,9 +36,11 @@ export class RemoteEntitlementAuthnRepository implements AuthnRepository {
   ) {}
 
   findIdentityByUsername = (username: string) => this.delegate.findIdentityByUsername(username);
+  findIdentityByExternal = (provider: string, externalSubject: string) => this.delegate.findIdentityByExternal(provider, externalSubject);
   getIdentityBySubject = (subjectId: string) => this.delegate.getIdentityBySubject(subjectId);
   putIdentity = (identity: Identity) => this.delegate.putIdentity(identity);
   getSubject = (subjectId: string) => this.delegate.getSubject(subjectId);
+  findSubjectByEmail = (email: string) => this.delegate.findSubjectByEmail(email);
   putSubject = (subject: Subject) => this.delegate.putSubject(subject);
   listServiceAccountCredentials = (subjectId: string) => this.delegate.listServiceAccountCredentials(subjectId);
   putServiceAccountCredential = (credential: ServiceAccountCredential) => this.delegate.putServiceAccountCredential(credential);
@@ -82,12 +86,26 @@ export class MemoryAuthnRepository implements AuthnRepository {
     return identity && copy(identity);
   }
 
+  async findIdentityByExternal(provider: string, externalSubject: string): Promise<Identity | undefined> {
+    const identity = [...this.identities.values()].find(
+      (candidate) => candidate.externalProvider === provider && candidate.externalSubject === externalSubject,
+    );
+    return identity && copy(identity);
+  }
+
   async putIdentity(identity: Identity): Promise<void> {
     this.identities.set(identity.identityId, copy(identity));
   }
 
   async getSubject(subjectId: string): Promise<Subject | undefined> {
     const subject = this.subjects.get(subjectId);
+    return subject && copy(subject);
+  }
+
+  async findSubjectByEmail(email: string): Promise<Subject | undefined> {
+    const subject = [...this.subjects.values()].find(
+      (candidate) => candidate.email?.toLowerCase() === email.toLowerCase(),
+    );
     return subject && copy(subject);
   }
 
@@ -268,6 +286,13 @@ export class D1AuthnRepository implements AuthnRepository {
     return row ? identityFromRow(row) : undefined;
   }
 
+  async findIdentityByExternal(provider: string, externalSubject: string): Promise<Identity | undefined> {
+    const row = await this.db.prepare(
+      "SELECT * FROM identities WHERE external_provider = ? AND external_subject = ?",
+    ).bind(provider, externalSubject).first<IdentityRow>();
+    return row ? identityFromRow(row) : undefined;
+  }
+
   async getIdentityBySubject(subjectId: string): Promise<Identity | undefined> {
     const row = await this.db.prepare("SELECT * FROM identities WHERE subject_id = ?").bind(subjectId).first<IdentityRow>();
     return row ? identityFromRow(row) : undefined;
@@ -295,6 +320,12 @@ export class D1AuthnRepository implements AuthnRepository {
 
   async getSubject(subjectId: string): Promise<Subject | undefined> {
     const row = await this.db.prepare("SELECT * FROM subjects WHERE subject_id = ?").bind(subjectId).first<SubjectRow>();
+    return row ? subjectFromRow(row) : undefined;
+  }
+
+  async findSubjectByEmail(email: string): Promise<Subject | undefined> {
+    const row = await this.db.prepare("SELECT * FROM subjects WHERE email = ? COLLATE NOCASE")
+      .bind(email).first<SubjectRow>();
     return row ? subjectFromRow(row) : undefined;
   }
 

@@ -1,7 +1,7 @@
 import { D1AuthnRepository, RemoteEntitlementAuthnRepository, type AuthnRepository } from "./repository";
 import { AuthenticationService, AuthnError } from "./service";
 import { hashPassword, sha256 } from "./crypto";
-import type { AuthnConfig, PublicJwk, RequestMetadata } from "./types";
+import type { AuthnConfig, OidcProviderConfig, PublicJwk, RequestMetadata } from "./types";
 
 export interface AuthnWorkerEnv {
   CONTROL_DB: D1Database;
@@ -21,6 +21,7 @@ export interface AuthnWorkerEnv {
   MANAGEMENT_API_URL?: string;
   MANAGEMENT_API_TOKEN?: string;
   MANAGEMENT_API?: Fetcher;
+  OIDC_PROVIDERS_JSON?: string;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -42,6 +43,9 @@ function configFromEnv(env: AuthnWorkerEnv): AuthnConfig {
     accessTokenSeconds: parsePositiveInt(env.ACCESS_TOKEN_SECONDS, 600),
     refreshTokenSeconds: parsePositiveInt(env.REFRESH_TOKEN_SECONDS, 2_592_000),
     maxScopeClaims: parsePositiveInt(env.MAX_SCOPE_CLAIMS, 64),
+    oidcProviders: env.OIDC_PROVIDERS_JSON
+      ? JSON.parse(env.OIDC_PROVIDERS_JSON) as OidcProviderConfig[]
+      : [],
   };
 }
 
@@ -116,6 +120,17 @@ export async function handleAuthnRequest(request: Request, env: AuthnWorkerEnv):
       const body = await jsonBody<{ username?: string; password?: string; audience?: string; mfaCode?: string }>(request);
       if (!body.username || !body.password || !body.audience) throw new AuthnError("invalid_request", "username, password, and audience are required");
       return json(await service.login({ username: body.username, password: body.password, audience: body.audience, ...(body.mfaCode ? { mfaCode: body.mfaCode } : {}) }, await metadata(request, env)), {}, origin);
+    }
+    if (request.method === "POST" && url.pathname === "/auth/federated/oidc") {
+      const body = await jsonBody<{ providerId?: string; idToken?: string; audience?: string }>(request);
+      if (!body.providerId || !body.idToken || !body.audience) {
+        throw new AuthnError("invalid_request", "providerId, idToken, and audience are required");
+      }
+      return json(await service.federatedOidcLogin({
+        providerId: body.providerId,
+        idToken: body.idToken,
+        audience: body.audience,
+      }, await metadata(request, env)), {}, origin);
     }
     if (request.method === "POST" && url.pathname === "/auth/refresh") {
       const body = await jsonBody<{ refreshToken?: string }>(request);

@@ -1,6 +1,7 @@
 import {
   SignJWT,
   createLocalJWKSet,
+  createRemoteJWKSet,
   importJWK,
   jwtVerify,
   type JWTPayload,
@@ -10,6 +11,7 @@ import { buildCompactScopeClaims } from "./claims";
 import {
   randomToken,
   randomTotpSecret,
+  hashPassword,
   sha256,
   verifyPassword,
   verifyTotp,
@@ -44,6 +46,12 @@ export interface LoginInput {
   password: string;
   audience: string;
   mfaCode?: string;
+}
+
+export interface FederatedOidcInput {
+  providerId: string;
+  idToken: string;
+  audience: string;
 }
 
 export class AuthenticationService {
@@ -88,6 +96,95 @@ export class AuthenticationService {
     identity.updatedAt = identity.lastLoginAt;
     await this.repository.putIdentity(identity);
     await this.repository.recordAuthEvent(subject.subjectId, "auth.login", { audience: input.audience });
+    return this.issueTokenPair(subject.subjectId, input.audience, metadata);
+  }
+
+  async federatedOidcLogin(input: FederatedOidcInput, metadata: RequestMetadata = {}): Promise<TokenPair> {
+    this.assertAudience(input.audience);
+    const provider = this.config.oidcProviders.find((candidate) => candidate.providerId === input.providerId);
+    if (!provider) throw new AuthnError("invalid_request", "OIDC provider is not configured", 404);
+    if (!provider.jwksUrl && !provider.jwks?.length) {
+      throw new AuthnError("invalid_request", "OIDC provider has no JWKS configuration", 500);
+    }
+    let payload: JWTPayload;
+    try {
+      const keySet = provider.jwks?.length
+        ? createLocalJWKSet({ keys: provider.jwks })
+        : createRemoteJWKSet(new URL(provider.jwksUrl!));
+      payload = (await jwtVerify(input.idToken, keySet, {
+        issuer: provider.issuer,
+        audience: provider.clientId,
+        algorithms: provider.algorithms ?? ["RS256", "ES256"],
+        maxTokenAge: "10m",
+      })).payload;
+    } catch {
+      throw new AuthnError("invalid_credentials", "federated identity token is invalid", 401);
+    }
+    if (!payload.sub) throw new AuthnError("invalid_credentials", "federated identity has no subject", 401);
+    if (provider.requireVerifiedEmail && (typeof payload.email !== "string" || payload.email_verified !== true)) {
+      throw new AuthnError("invalid_credentials", "federated identity requires a verified email", 401);
+    }
+    if (provider.requiredAcrValues?.length && (
+      typeof payload.acr !== "string" || !provider.requiredAcrValues.includes(payload.acr)
+    )) {
+      throw new AuthnError("invalid_credentials", "federated identity assurance is insufficient", 401);
+    }
+
+    let identity = await this.repository.findIdentityByExternal(provider.providerId, payload.sub);
+    if (!identity) {
+      const email = typeof payload.email === "string" ? payload.email.toLowerCase() : undefined;
+      let subject = email ? await this.repository.findSubjectByEmail(email) : undefined;
+      if (!subject && provider.jitProvisioning) {
+        const now = this.isoNow();
+        subject = {
+          subjectId: `user-${crypto.randomUUID()}`,
+          kind: "User",
+          displayName: typeof payload.name === "string" ? payload.name : email ?? payload.sub,
+          ...(email ? { email } : {}),
+          status: "active",
+          metadata: { provisionedBy: provider.providerId },
+          createdAt: now,
+          updatedAt: now,
+        };
+        await this.repository.putSubject(subject);
+      }
+      if (!subject) throw new AuthnError("account_unavailable", "federated identity is not provisioned", 403);
+      identity = await this.repository.getIdentityBySubject(subject.subjectId);
+      if (identity?.externalProvider && (
+        identity.externalProvider !== provider.providerId || identity.externalSubject !== payload.sub
+      )) {
+        throw new AuthnError("account_unavailable", "subject is linked to another federated identity", 409);
+      }
+      if (identity) {
+        identity.externalProvider = provider.providerId;
+        identity.externalSubject = payload.sub;
+      } else {
+        const now = this.isoNow();
+        const preferred = typeof payload.preferred_username === "string" ? payload.preferred_username : email;
+        const username = preferred && !(await this.repository.findIdentityByUsername(preferred))
+          ? preferred
+          : `${provider.providerId}:${payload.sub}`;
+        identity = {
+          identityId: `identity-${crypto.randomUUID()}`,
+          subjectId: subject.subjectId,
+          username,
+          passwordHash: await hashPassword(randomToken()),
+          mfaEnabled: false,
+          externalProvider: provider.providerId,
+          externalSubject: payload.sub,
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+    }
+    const subject = await this.requireActiveSubject(identity.subjectId);
+    identity.lastLoginAt = this.isoNow();
+    identity.updatedAt = identity.lastLoginAt;
+    await this.repository.putIdentity(identity);
+    await this.repository.recordAuthEvent(subject.subjectId, "auth.federated_login", {
+      providerId: provider.providerId,
+      audience: input.audience,
+    });
     return this.issueTokenPair(subject.subjectId, input.audience, metadata);
   }
 

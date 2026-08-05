@@ -5,6 +5,7 @@ import { sha256 } from "../authn/crypto";
 import { R2ManagementPublisher } from "./publisher";
 import { D1ManagementRepository, type ScopeDraft, type ServiceDraft } from "./repository";
 import { ManagementError, ManagementService } from "./service";
+import { handleScimRequest, scimError } from "./scim";
 export { MANAGEMENT_ROUTES } from "./routes";
 
 export interface ManagementWorkerEnv {
@@ -15,6 +16,7 @@ export interface ManagementWorkerEnv {
   AUTHZ_ADMIN_TOKEN?: string;
   AUTHZ_ADMIN?: Fetcher;
   CORS_ORIGIN?: string;
+  SCIM_BEARER_TOKEN?: string;
 }
 
 function response(value: unknown, status = 200, origin = ""): Response {
@@ -226,6 +228,25 @@ export async function handleManagementRequest(request: Request, env: ManagementW
   if (request.method === "GET" && url.pathname === "/openapi/management-service.openapi.yaml") {
     return new Response(managementOpenApi, { headers: { "content-type": "application/yaml; charset=utf-8", "cache-control": "public, max-age=300" } });
   }
+  if (url.pathname.startsWith("/scim/v2/")) {
+    try {
+      const token = bearerToken(request);
+      if (!env.SCIM_BEARER_TOKEN || token !== env.SCIM_BEARER_TOKEN) {
+        throw new ManagementError("unauthorized", "SCIM bearer token is required", 401);
+      }
+      const repository = new D1ManagementRepository(env.CONTROL_DB);
+      const publisher = new R2ManagementPublisher({ bucket: env.POLICY_BUCKET });
+      return await handleScimRequest(
+        request,
+        env.CONTROL_DB,
+        repository,
+        new ManagementService(repository, publisher),
+        "scim-provisioner",
+      );
+    } catch (error) {
+      return scimError(error);
+    }
+  }
   try {
     const actorId = actor(request, env);
     return await idempotent(request, env, actorId, () => route(request, env, actorId, origin));
@@ -236,6 +257,10 @@ export async function handleManagementRequest(request: Request, env: ManagementW
     console.error("management request failed", error instanceof Error ? error.message : "unknown error");
     return response({ error: { code: "internal_error", message: "request failed" } }, 500, origin);
   }
+}
+
+function bearerToken(request: Request): string | undefined {
+  return request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
 }
 
 export default { fetch: handleManagementRequest } satisfies ExportedHandler<ManagementWorkerEnv>;

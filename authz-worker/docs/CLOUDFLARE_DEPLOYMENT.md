@@ -29,9 +29,11 @@ npx wrangler secret put JWT_PUBLIC_JWKS --config wrangler.authn.jsonc --env stag
 npx wrangler secret put INTERNAL_AUTH_TOKEN --config wrangler.authn.jsonc --env staging
 npx wrangler secret put IP_HASH_SECRET --config wrangler.authn.jsonc --env staging
 npx wrangler secret put MANAGEMENT_API_TOKEN --config wrangler.authn.jsonc --env staging
+npx wrangler secret put OIDC_PROVIDERS_JSON --config wrangler.authn.jsonc --env staging
 
 npx wrangler secret put MANAGEMENT_BOOTSTRAP_TOKEN --config wrangler.management.jsonc --env staging
 npx wrangler secret put AUTHZ_ADMIN_TOKEN --config wrangler.management.jsonc --env staging
+npx wrangler secret put SCIM_BEARER_TOKEN --config wrangler.management.jsonc --env staging
 npx wrangler secret put ADMIN_TOKEN --config wrangler.demo-authz.jsonc --env staging
 ```
 

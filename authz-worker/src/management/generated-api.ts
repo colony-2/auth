@@ -36,6 +36,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scim/v2/Users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listScimUsers"];
+        put?: never;
+        post: operations["createScimUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Users/{subjectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subjectId: components["parameters"]["SubjectId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getScimUser"];
+        put: operations["replaceScimUser"];
+        post?: never;
+        delete: operations["deactivateScimUser"];
+        options?: never;
+        head?: never;
+        patch: operations["patchScimUser"];
+        trace?: never;
+    };
+    "/scim/v2/Groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listScimGroups"];
+        put?: never;
+        post: operations["createScimGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Groups/{groupId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getScimGroup"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteScimGroup"];
+        options?: never;
+        head?: never;
+        patch: operations["patchScimGroup"];
+        trace?: never;
+    };
     "/services": {
         parameters: {
             query?: never;
@@ -481,6 +549,67 @@ export interface components {
         SubjectKind: "User" | "ServiceAccount" | "Group";
         /** @enum {string} */
         SubjectStatus: "active" | "suspended" | "disabled";
+        ScimEmail: {
+            /** Format: email */
+            value: string;
+            primary?: boolean;
+        };
+        ScimUserInput: {
+            id?: string;
+            externalId?: string;
+            userName: string;
+            displayName?: string;
+            /** @default true */
+            active: boolean;
+            emails?: components["schemas"]["ScimEmail"][];
+        };
+        ScimUser: components["schemas"]["ScimUserInput"] & {
+            schemas: "urn:ietf:params:scim:schemas:core:2.0:User"[];
+            id: string;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ScimMember: {
+            value: string;
+            display?: string;
+            type?: string;
+        };
+        ScimGroupInput: {
+            id?: string;
+            externalId?: string;
+            displayName: string;
+            scopeId: components["schemas"]["Identifier"];
+            members?: components["schemas"]["ScimMember"][];
+        };
+        ScimGroup: components["schemas"]["ScimGroupInput"] & {
+            schemas: "urn:ietf:params:scim:schemas:core:2.0:Group"[];
+            id: string;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ScimPatch: {
+            schemas?: string[];
+            Operations: {
+                /** @enum {string} */
+                op: "add" | "remove" | "replace";
+                path?: string;
+                value?: unknown;
+            }[];
+        };
+        ScimListResponse: {
+            schemas: "urn:ietf:params:scim:api:messages:2.0:ListResponse"[];
+            totalResults: number;
+            startIndex: number;
+            itemsPerPage: number;
+            Resources: unknown[];
+        };
+        ScimError: {
+            schemas: "urn:ietf:params:scim:api:messages:2.0:Error"[];
+            status: string;
+            detail: string;
+        };
         ScopeTypeDefinition: {
             id: components["schemas"]["Identifier"];
             name?: string;
@@ -922,6 +1051,42 @@ export interface components {
                 "application/json": components["schemas"]["PublishResult"];
             };
         };
+        /** @description SCIM user */
+        ScimUser: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/scim+json": components["schemas"]["ScimUser"];
+            };
+        };
+        /** @description SCIM group */
+        ScimGroup: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/scim+json": components["schemas"]["ScimGroup"];
+            };
+        };
+        /** @description SCIM list response */
+        ScimList: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/scim+json": components["schemas"]["ScimListResponse"];
+            };
+        };
+        /** @description SCIM error response */
+        ScimError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/scim+json": components["schemas"]["ScimError"];
+            };
+        };
     };
     parameters: {
         ServiceId: components["schemas"]["Identifier"];
@@ -982,6 +1147,203 @@ export interface operations {
                     "application/yaml": string;
                 };
             };
+        };
+    };
+    listScimUsers: {
+        parameters: {
+            query?: {
+                startIndex?: number;
+                count?: number;
+                filter?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScimList"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    createScimUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/scim+json": components["schemas"]["ScimUserInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ScimUser"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    getScimUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subjectId: components["parameters"]["SubjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScimUser"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    replaceScimUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subjectId: components["parameters"]["SubjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/scim+json": components["schemas"]["ScimUserInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ScimUser"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    deactivateScimUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subjectId: components["parameters"]["SubjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User deactivated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["ScimError"];
+        };
+    };
+    patchScimUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subjectId: components["parameters"]["SubjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/scim+json": components["schemas"]["ScimPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ScimUser"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    listScimGroups: {
+        parameters: {
+            query?: {
+                startIndex?: number;
+                count?: number;
+                scopeId?: components["schemas"]["Identifier"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScimList"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    createScimGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/scim+json": components["schemas"]["ScimGroupInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ScimGroup"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    getScimGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScimGroup"];
+            default: components["responses"]["ScimError"];
+        };
+    };
+    deleteScimGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["ScimError"];
+        };
+    };
+    patchScimGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/scim+json": components["schemas"]["ScimPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ScimGroup"];
+            default: components["responses"]["ScimError"];
         };
     };
     listServices: {

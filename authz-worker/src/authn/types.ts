@@ -75,6 +75,18 @@ export interface PublicJwk {
   [key: string]: unknown;
 }
 
+export interface OidcProviderConfig {
+  providerId: string;
+  issuer: string;
+  clientId: string;
+  jwksUrl?: string;
+  jwks?: PublicJwk[];
+  algorithms?: Array<"RS256" | "ES256">;
+  requireVerifiedEmail?: boolean;
+  requiredAcrValues?: string[];
+  jitProvisioning?: boolean;
+}
+
 export interface AuthnConfig {
   issuer: string;
   privateJwk: Record<string, unknown>;
@@ -85,6 +97,7 @@ export interface AuthnConfig {
   refreshTokenSeconds: number;
   allowedAudiences: string[];
   maxScopeClaims: number;
+  oidcProviders: OidcProviderConfig[];
 }
 
 export interface RequestMetadata {

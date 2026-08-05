@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Authorization Management Service API
-  version: 1.0.0
+  version: 1.1.0
   description: Versioned control-plane API for service vocabularies, subjects, scopes, entitlements, policy artifacts, and audit history.
 servers:
   - url: http://127.0.0.1:8789
@@ -16,6 +16,7 @@ tags:
   - name: Entitlements
   - name: Publishing
   - name: Audit
+  - name: Provisioning
 paths:
   /health:
     get:
@@ -41,6 +42,94 @@ paths:
             application/yaml:
               schema:
                 type: string
+  /scim/v2/Users:
+    get:
+      operationId: listScimUsers
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      parameters:
+        - { name: startIndex, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: count, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+        - { name: filter, in: query, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/ScimList' }
+        default: { $ref: '#/components/responses/ScimError' }
+    post:
+      operationId: createScimUser
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimUserInput' } } }
+      responses:
+        '201': { $ref: '#/components/responses/ScimUser' }
+        default: { $ref: '#/components/responses/ScimError' }
+  /scim/v2/Users/{subjectId}:
+    parameters: [{ $ref: '#/components/parameters/SubjectId' }]
+    get:
+      operationId: getScimUser
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      responses: { '200': { $ref: '#/components/responses/ScimUser' }, default: { $ref: '#/components/responses/ScimError' } }
+    put:
+      operationId: replaceScimUser
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimUserInput' } } }
+      responses: { '200': { $ref: '#/components/responses/ScimUser' }, default: { $ref: '#/components/responses/ScimError' } }
+    patch:
+      operationId: patchScimUser
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimPatch' } } }
+      responses: { '200': { $ref: '#/components/responses/ScimUser' }, default: { $ref: '#/components/responses/ScimError' } }
+    delete:
+      operationId: deactivateScimUser
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      responses: { '204': { description: User deactivated }, default: { $ref: '#/components/responses/ScimError' } }
+  /scim/v2/Groups:
+    get:
+      operationId: listScimGroups
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      parameters:
+        - { name: startIndex, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: count, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+        - { name: scopeId, in: query, schema: { $ref: '#/components/schemas/Identifier' } }
+      responses: { '200': { $ref: '#/components/responses/ScimList' }, default: { $ref: '#/components/responses/ScimError' } }
+    post:
+      operationId: createScimGroup
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimGroupInput' } } }
+      responses: { '201': { $ref: '#/components/responses/ScimGroup' }, default: { $ref: '#/components/responses/ScimError' } }
+  /scim/v2/Groups/{groupId}:
+    parameters: [{ $ref: '#/components/parameters/GroupId' }]
+    get:
+      operationId: getScimGroup
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      responses: { '200': { $ref: '#/components/responses/ScimGroup' }, default: { $ref: '#/components/responses/ScimError' } }
+    patch:
+      operationId: patchScimGroup
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimPatch' } } }
+      responses: { '200': { $ref: '#/components/responses/ScimGroup' }, default: { $ref: '#/components/responses/ScimError' } }
+    delete:
+      operationId: deleteScimGroup
+      tags: [Provisioning]
+      security: [{ scimBearerAuth: [] }]
+      responses: { '204': { description: Group deleted }, default: { $ref: '#/components/responses/ScimError' } }
   /services:
     get:
       operationId: listServices
@@ -498,6 +587,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Access token issued by the companion authentication service. The authorization gateway enforces management actions before proxying.
+    scimBearerAuth:
+      type: http
+      scheme: bearer
+      description: Dedicated high-entropy provisioning token stored as the SCIM_BEARER_TOKEN Worker secret.
   parameters:
     ServiceId: { name: serviceId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
     ServiceIdQuery: { name: serviceId, in: query, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
@@ -562,6 +655,18 @@ components:
     PublishResult:
       description: Published artifact keys and active version
       content: { application/json: { schema: { $ref: '#/components/schemas/PublishResult' } } }
+    ScimUser:
+      description: SCIM user
+      content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimUser' } } }
+    ScimGroup:
+      description: SCIM group
+      content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimGroup' } } }
+    ScimList:
+      description: SCIM list response
+      content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimListResponse' } } }
+    ScimError:
+      description: SCIM error response
+      content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimError' } } }
   schemas:
     Identifier: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,127}$' }
     Timestamp: { type: string, format: date-time }
@@ -571,6 +676,78 @@ components:
       properties: { status: { const: ok }, service: { const: management } }
     SubjectKind: { type: string, enum: [User, ServiceAccount, Group] }
     SubjectStatus: { type: string, enum: [active, suspended, disabled] }
+    ScimEmail:
+      type: object
+      required: [value]
+      properties: { value: { type: string, format: email }, primary: { type: boolean } }
+    ScimUserInput:
+      type: object
+      required: [userName]
+      properties:
+        id: { type: string }
+        externalId: { type: string }
+        userName: { type: string, minLength: 1 }
+        displayName: { type: string }
+        active: { type: boolean, default: true }
+        emails: { type: array, items: { $ref: '#/components/schemas/ScimEmail' } }
+    ScimUser:
+      allOf:
+        - { $ref: '#/components/schemas/ScimUserInput' }
+        - type: object
+          required: [schemas, id, active, meta]
+          properties:
+            schemas: { type: array, items: { const: 'urn:ietf:params:scim:schemas:core:2.0:User' } }
+            id: { type: string }
+            meta: { type: object, additionalProperties: true }
+    ScimMember:
+      type: object
+      required: [value]
+      properties: { value: { type: string }, display: { type: string }, type: { type: string } }
+    ScimGroupInput:
+      type: object
+      required: [displayName, scopeId]
+      properties:
+        id: { type: string }
+        externalId: { type: string }
+        displayName: { type: string, minLength: 1 }
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        members: { type: array, items: { $ref: '#/components/schemas/ScimMember' } }
+    ScimGroup:
+      allOf:
+        - { $ref: '#/components/schemas/ScimGroupInput' }
+        - type: object
+          required: [schemas, id, meta]
+          properties:
+            schemas: { type: array, items: { const: 'urn:ietf:params:scim:schemas:core:2.0:Group' } }
+            id: { type: string }
+            meta: { type: object, additionalProperties: true }
+    ScimPatch:
+      type: object
+      required: [Operations]
+      properties:
+        schemas: { type: array, items: { type: string } }
+        Operations:
+          type: array
+          items:
+            type: object
+            required: [op]
+            properties: { op: { type: string, enum: [add, remove, replace] }, path: { type: string }, value: {} }
+    ScimListResponse:
+      type: object
+      required: [schemas, totalResults, startIndex, itemsPerPage, Resources]
+      properties:
+        schemas: { type: array, items: { const: 'urn:ietf:params:scim:api:messages:2.0:ListResponse' } }
+        totalResults: { type: integer, minimum: 0 }
+        startIndex: { type: integer, minimum: 1 }
+        itemsPerPage: { type: integer, minimum: 0 }
+        Resources: { type: array, items: {} }
+    ScimError:
+      type: object
+      required: [schemas, status, detail]
+      properties:
+        schemas: { type: array, items: { const: 'urn:ietf:params:scim:api:messages:2.0:Error' } }
+        status: { type: string }
+        detail: { type: string }
     ScopeTypeDefinition:
       type: object
       required: [id]
