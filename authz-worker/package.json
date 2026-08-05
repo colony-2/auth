@@ -1,0 +1,22 @@
+{
+  "name": "authz-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "test:integration": "node scripts/test-worker.mjs",
+    "postinstall": "node scripts/postinstall.mjs"
+  },
+  "dependencies": {
+    "@cedar-policy/cedar-wasm": "4.9.1",
+    "jose": "6.2.2",
+    "yaml": "2.8.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260405.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.80.0"
+  }
+}

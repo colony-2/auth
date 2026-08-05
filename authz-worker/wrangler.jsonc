@@ -1,0 +1,26 @@
+{
+  "name": "authz-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-05",
+  "r2_buckets": [
+    {
+      "binding": "POLICY_BUCKET",
+      "bucket_name": "authz-policy-bucket"
+    }
+  ],
+  "vars": {
+    "SERVICE_IDENTIFIER": "projects-api",
+    "JWKS_URL": "https://issuer.example.com/.well-known/jwks.json",
+    "JWT_ISSUER": "https://issuer.example.com/",
+    "UPSTREAM_ORIGIN": "http://127.0.0.1:9000",
+    "SCOPE_RESOLUTION": "[{\"type\":\"header\",\"header\":\"x-scope-id\",\"pattern\":\"^(?<scopeId>[A-Za-z0-9_-]+)$\"},{\"type\":\"body_json\",\"pointer\":\"/scopeId\",\"contentTypes\":[\"application/json\"]},{\"type\":\"body_regex\",\"pattern\":\"(?:^|[&\\\\s])scopeId=(?<scopeId>[^&\\\\s]+)\",\"contentTypes\":[\"text/plain\",\"application/x-www-form-urlencoded\"]},{\"type\":\"path\",\"pattern\":\"^/scope-path/(?<scopeId>[^/]+)/\"}]",
+    "MANIFEST_TTL_SECONDS": "2",
+    "SERVICE_CONFIG_TTL_SECONDS": "30",
+    "SCOPE_CONFIG_TTL_SECONDS": "30",
+    "EFFECTIVE_POLICY_TTL_SECONDS": "30",
+    "MAX_MANIFEST_CACHE_ENTRIES": "32",
+    "MAX_SERVICE_CONFIG_CACHE_ENTRIES": "16",
+    "MAX_SCOPE_CONFIG_CACHE_ENTRIES": "32",
+    "MAX_EFFECTIVE_POLICY_CACHE_ENTRIES": "16"
+  }
+}
