@@ -5,13 +5,14 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "types": [
-      "@cloudflare/workers-types"
+      "@cloudflare/workers-types",
+      "node"
     ],
     "skipLibCheck": true,
     "noEmit": true
   },
   "include": [
     "src/**/*.ts",
-    "scripts/**/*.mjs"
+    "tests/**/*.ts"
   ]
 }
