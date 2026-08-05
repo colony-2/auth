@@ -2,5 +2,9 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "project-workspace-demo-api",
   "main": "src/worker.ts",
-  "compatibility_date": "2026-04-05"
+  "compatibility_date": "2026-04-05",
+  "env": {
+    "staging": { "name": "project-workspace-demo-api-staging" },
+    "production": { "name": "project-workspace-demo-api-production" }
+  }
 }

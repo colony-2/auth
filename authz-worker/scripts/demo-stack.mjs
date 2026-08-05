@@ -32,6 +32,7 @@ async function prepareSecrets() {
     "AUTHZ_ADMIN_TOKEN=local-authz-admin-token",
     `AUTHZ_ADMIN_URL=${DEMO_URLS.gateway}`,
   ].join("\n") + "\n", { mode: 0o600 });
+  await writeFile(".dev.vars.gateway", `ADMIN_TOKEN=local-authz-admin-token\n`, { mode: 0o600 });
 }
 
 function runMigrations() {
@@ -87,7 +88,9 @@ async function startTestWorker(config, persist, bindings) {
     bindings,
     envFiles: config === "wrangler.authn.jsonc"
       ? [".dev.vars.authn"]
-      : config === "wrangler.management.jsonc" ? [".dev.vars.management"] : undefined,
+      : config === "wrangler.management.jsonc"
+        ? [".dev.vars.management"]
+        : config === "wrangler.demo-authz.jsonc" ? [".dev.vars.gateway"] : undefined,
     sendMetrics: false,
     dev: {
       watch: false,
@@ -193,7 +196,7 @@ async function main() {
   start("upstream", "npx", [...wrangler, "--config", "examples/project-workspace/wrangler.jsonc", "--port", "8790", "--inspector-port", "9230", "--persist-to", ".wrangler/state-upstream", "--log-level", "warn"]);
   start("authn", "npx", [...wrangler, "--config", "wrangler.authn.jsonc", "--port", "8788", "--inspector-port", "9231", "--persist-to", ".wrangler/state-authn", "--env-file", ".dev.vars.authn", "--log-level", "warn"]);
   start("management", "npx", [...wrangler, "--config", "wrangler.management.jsonc", "--port", "8789", "--inspector-port", "9232", "--persist-to", ".wrangler/state-management", "--env-file", ".dev.vars.management", "--log-level", "warn"]);
-  start("gateway", "npx", [...wrangler, "--config", "wrangler.demo-authz.jsonc", "--port", "8787", "--inspector-port", "9233", "--persist-to", ".wrangler/state-gateway", "--log-level", "warn"]);
+  start("gateway", "npx", [...wrangler, "--config", "wrangler.demo-authz.jsonc", "--port", "8787", "--inspector-port", "9233", "--persist-to", ".wrangler/state-gateway", "--env-file", ".dev.vars.gateway", "--log-level", "warn"]);
   start("ui", "npx", ["--no-install", "vite", "--config", "vite.config.ts", "--host", "127.0.0.1", "--port", "5173"], { VITE_MANAGEMENT_ACCESS_TOKEN: DEMO_SECRETS.management, VITE_DEMO_MODE: "true" });
 
   await Promise.all([

@@ -18,7 +18,38 @@
     "MANIFEST_TTL_SECONDS": "1",
     "SERVICE_CONFIG_TTL_SECONDS": "1",
     "SCOPE_CONFIG_TTL_SECONDS": "1",
-    "EFFECTIVE_POLICY_TTL_SECONDS": "1",
-    "ADMIN_TOKEN": "local-authz-admin-token"
+    "EFFECTIVE_POLICY_TTL_SECONDS": "1"
+  },
+  "env": {
+    "staging": {
+      "name": "project-workspace-authz-gateway-staging",
+      "r2_buckets": [{ "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-staging" }],
+      "vars": {
+        "SERVICE_IDENTIFIER": "projects-api",
+        "JWKS_URL": "https://authn-service-staging.example.workers.dev/.well-known/jwks.json",
+        "JWT_ISSUER": "https://authn-service-staging.example.workers.dev/",
+        "UPSTREAM_ORIGIN": "https://project-workspace-demo-api-staging.example.workers.dev",
+        "SCOPE_RESOLUTION": "[{\"type\":\"header\",\"header\":\"x-scope-id\",\"pattern\":\"^(?<scopeId>[A-Za-z0-9_-]+)$\"}]",
+        "MANIFEST_TTL_SECONDS": "2",
+        "SERVICE_CONFIG_TTL_SECONDS": "30",
+        "SCOPE_CONFIG_TTL_SECONDS": "30",
+        "EFFECTIVE_POLICY_TTL_SECONDS": "30"
+      }
+    },
+    "production": {
+      "name": "project-workspace-authz-gateway-production",
+      "r2_buckets": [{ "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-production" }],
+      "vars": {
+        "SERVICE_IDENTIFIER": "projects-api",
+        "JWKS_URL": "https://auth.example.com/.well-known/jwks.json",
+        "JWT_ISSUER": "https://auth.example.com/",
+        "UPSTREAM_ORIGIN": "https://projects-api.example.com",
+        "SCOPE_RESOLUTION": "[{\"type\":\"header\",\"header\":\"x-scope-id\",\"pattern\":\"^(?<scopeId>[A-Za-z0-9_-]+)$\"}]",
+        "MANIFEST_TTL_SECONDS": "2",
+        "SERVICE_CONFIG_TTL_SECONDS": "30",
+        "SCOPE_CONFIG_TTL_SECONDS": "30",
+        "EFFECTIVE_POLICY_TTL_SECONDS": "30"
+      }
+    }
   }
 }

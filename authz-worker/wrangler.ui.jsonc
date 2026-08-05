@@ -6,5 +6,9 @@
     "directory": "./dist/management-ui",
     "not_found_handling": "single-page-application",
     "html_handling": "auto-trailing-slash"
+  },
+  "env": {
+    "staging": { "name": "authz-management-ui-staging" },
+    "production": { "name": "authz-management-ui-production" }
   }
 }

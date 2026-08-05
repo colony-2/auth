@@ -20,5 +20,47 @@
     "REFRESH_TOKEN_SECONDS": "2592000",
     "MAX_SCOPE_CLAIMS": "64",
     "CORS_ORIGIN": "http://127.0.0.1:5173"
+  },
+  "env": {
+    "staging": {
+      "name": "authn-service-staging",
+      "d1_databases": [{
+        "binding": "CONTROL_DB",
+        "database_name": "authz-control-plane-staging",
+        "database_id": "replace-with-staging-d1-database-id",
+        "migrations_dir": "migrations"
+      }],
+      "vars": {
+        "JWT_ISSUER": "https://authn-service-staging.example.workers.dev/",
+        "JWT_KEY_ID": "staging-es256-1",
+        "JWT_ALGORITHM": "ES256",
+        "ALLOWED_AUDIENCES": "projects-api",
+        "ACCESS_TOKEN_SECONDS": "600",
+        "REFRESH_TOKEN_SECONDS": "2592000",
+        "MAX_SCOPE_CLAIMS": "64",
+        "CORS_ORIGIN": "https://authz-management-ui-staging.example.workers.dev",
+        "MANAGEMENT_API_URL": "https://authz-management-service-staging.example.workers.dev"
+      }
+    },
+    "production": {
+      "name": "authn-service-production",
+      "d1_databases": [{
+        "binding": "CONTROL_DB",
+        "database_name": "authz-control-plane-production",
+        "database_id": "replace-with-production-d1-database-id",
+        "migrations_dir": "migrations"
+      }],
+      "vars": {
+        "JWT_ISSUER": "https://auth.example.com/",
+        "JWT_KEY_ID": "production-es256-1",
+        "JWT_ALGORITHM": "ES256",
+        "ALLOWED_AUDIENCES": "projects-api",
+        "ACCESS_TOKEN_SECONDS": "600",
+        "REFRESH_TOKEN_SECONDS": "2592000",
+        "MAX_SCOPE_CLAIMS": "64",
+        "CORS_ORIGIN": "https://authz-admin.example.com",
+        "MANAGEMENT_API_URL": "https://authz-management.example.com"
+      }
+    }
   }
 }

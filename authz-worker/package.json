@@ -15,6 +15,10 @@
     "demo:token": "node scripts/demo-token.mjs",
     "demo:request": "node scripts/demo-request.mjs",
     "demo:test": "node scripts/demo-stack.mjs --test",
+    "deploy:cloudflare": "node scripts/cloudflare-deploy.mjs",
+    "deploy:cloudflare:dry-run": "node scripts/cloudflare-deploy.mjs --dry-run",
+    "smoke:cloudflare": "node scripts/cloudflare-smoke.mjs",
+    "rollback:config": "node scripts/rollback-version.mjs",
     "build:management-ui": "vite build --config vite.config.ts",
     "deploy:authn": "wrangler deploy --config wrangler.authn.jsonc",
     "deploy:authn:dry-run": "wrangler deploy --dry-run --config wrangler.authn.jsonc",
@@ -30,6 +34,7 @@
     "test:ui": "vitest run tests/ui",
     "generate:management-client": "openapi-typescript openapi/management-service.openapi.yaml -o src/management/generated-api.ts",
     "test:integration": "node scripts/test-worker.mjs",
+    "verify": "npm run typecheck && npm run typecheck:ui && npm test && npm run test:integration && npm run demo:test && npm run deploy:cloudflare:dry-run -- --env staging",
     "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {

@@ -1,0 +1,32 @@
+name: authz-worker
+
+on:
+  pull_request:
+    paths: ["authz-worker/**", ".github/workflows/authz-worker.yml"]
+  push:
+    branches: [main]
+    paths: ["authz-worker/**", ".github/workflows/authz-worker.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: authz-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: authz-worker/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run typecheck:ui
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run demo:test
+      - run: npm run deploy:cloudflare:dry-run -- --env staging

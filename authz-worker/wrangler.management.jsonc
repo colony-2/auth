@@ -27,5 +27,35 @@
   "vars": {
     "CORS_ORIGIN": "http://127.0.0.1:5173",
     "AUTHZ_ADMIN_URL": "http://127.0.0.1:8791"
+  },
+  "env": {
+    "staging": {
+      "name": "authz-management-service-staging",
+      "d1_databases": [{
+        "binding": "CONTROL_DB",
+        "database_name": "authz-control-plane-staging",
+        "database_id": "replace-with-staging-d1-database-id",
+        "migrations_dir": "migrations"
+      }],
+      "r2_buckets": [{ "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-staging" }],
+      "vars": {
+        "CORS_ORIGIN": "https://authz-management-ui-staging.example.workers.dev",
+        "AUTHZ_ADMIN_URL": "https://project-workspace-authz-gateway-staging.example.workers.dev"
+      }
+    },
+    "production": {
+      "name": "authz-management-service-production",
+      "d1_databases": [{
+        "binding": "CONTROL_DB",
+        "database_name": "authz-control-plane-production",
+        "database_id": "replace-with-production-d1-database-id",
+        "migrations_dir": "migrations"
+      }],
+      "r2_buckets": [{ "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-production" }],
+      "vars": {
+        "CORS_ORIGIN": "https://authz-admin.example.com",
+        "AUTHZ_ADMIN_URL": "https://authz-gateway.example.com"
+      }
+    }
   }
 }
