@@ -1,0 +1,912 @@
+openapi: 3.1.0
+info:
+  title: Authorization Management Service API
+  version: 1.0.0
+  description: Versioned control-plane API for service vocabularies, subjects, scopes, entitlements, policy artifacts, and audit history.
+servers:
+  - url: http://127.0.0.1:8789
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: System
+  - name: Services
+  - name: Subjects
+  - name: Scopes
+  - name: Entitlements
+  - name: Publishing
+  - name: Audit
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /openapi/management-service.openapi.yaml:
+    get:
+      operationId: getOpenApiDocument
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: This OpenAPI contract
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /services:
+    get:
+      operationId: listServices
+      tags: [Services]
+      responses:
+        '200': { $ref: '#/components/responses/ServiceList' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createService
+      tags: [Services]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateServiceRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Service' }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/vocabulary:
+    parameters: [{ $ref: '#/components/parameters/ServiceId' }]
+    get:
+      operationId: getServiceVocabulary
+      tags: [Services]
+      responses:
+        '200': { $ref: '#/components/responses/Vocabulary' }
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      operationId: replaceServiceVocabulary
+      tags: [Services]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceVocabulary' }
+      responses:
+        '200': { $ref: '#/components/responses/Vocabulary' }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/import-openapi:
+    parameters: [{ $ref: '#/components/parameters/ServiceId' }]
+    post:
+      operationId: importServiceOpenApi
+      tags: [Services]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document]
+              properties:
+                document: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Derived vocabulary and authorization descriptor
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpenApiImportResult' }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/config:
+    parameters: [{ $ref: '#/components/parameters/ServiceId' }]
+    get:
+      operationId: getServiceConfigDraft
+      tags: [Services]
+      responses:
+        '200':
+          description: Current service configuration draft, or null
+          content:
+            application/json:
+              schema:
+                oneOf: [{ $ref: '#/components/schemas/ServiceDraft' }, { type: 'null' }]
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      operationId: replaceServiceConfigDraft
+      tags: [Services]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceDraftInput' }
+      responses:
+        '200':
+          description: Updated draft
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceDraft' }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/versions:
+    parameters: [{ $ref: '#/components/parameters/ServiceId' }]
+    get:
+      operationId: listServiceConfigVersions
+      tags: [Publishing]
+      responses:
+        '200': { $ref: '#/components/responses/ConfigVersionList' }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/publish:
+    parameters: [{ $ref: '#/components/parameters/ServiceId' }]
+    post:
+      operationId: publishServiceConfig
+      tags: [Publishing]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/PublishResult' }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/cache/invalidate:
+    parameters: [{ $ref: '#/components/parameters/ServiceId' }]
+    post:
+      operationId: invalidateServiceCache
+      tags: [Publishing]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scopeId: { $ref: '#/components/schemas/Identifier' }
+      responses:
+        '200':
+          description: Cache invalidated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties: { ok: { const: true } }
+        default: { $ref: '#/components/responses/Error' }
+  /services/{serviceId}/subjects/{subjectId}/claim-preview:
+    parameters:
+      - { $ref: '#/components/parameters/ServiceId' }
+      - { $ref: '#/components/parameters/SubjectId' }
+    get:
+      operationId: previewSubjectClaims
+      tags: [Entitlements]
+      responses:
+        '200':
+          description: Compact claim projection
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClaimPreview' }
+        default: { $ref: '#/components/responses/Error' }
+  /subjects:
+    get:
+      operationId: listSubjects
+      tags: [Subjects]
+      responses:
+        '200': { $ref: '#/components/responses/SubjectList' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createSubject
+      tags: [Subjects]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubjectInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Subject' }
+        default: { $ref: '#/components/responses/Error' }
+  /subjects/{subjectId}:
+    parameters: [{ $ref: '#/components/parameters/SubjectId' }]
+    get:
+      operationId: getSubject
+      tags: [Subjects]
+      responses:
+        '200': { $ref: '#/components/responses/Subject' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateSubject
+      tags: [Subjects]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubjectPatch' }
+      responses:
+        '200': { $ref: '#/components/responses/Subject' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes:
+    get:
+      operationId: listScopes
+      tags: [Scopes]
+      parameters: [{ $ref: '#/components/parameters/ServiceIdQuery' }]
+      responses:
+        '200': { $ref: '#/components/responses/ScopeList' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createScope
+      tags: [Scopes]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopeInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Scope' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    get:
+      operationId: getScope
+      tags: [Scopes]
+      responses:
+        '200': { $ref: '#/components/responses/Scope' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateScope
+      tags: [Scopes]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopePatch' }
+      responses:
+        '200': { $ref: '#/components/responses/Scope' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/config:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    get:
+      operationId: getScopeConfigDraft
+      tags: [Scopes]
+      responses:
+        '200':
+          description: Current scope draft, or null
+          content:
+            application/json:
+              schema:
+                oneOf: [{ $ref: '#/components/schemas/ScopeDraft' }, { type: 'null' }]
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      operationId: replaceScopeConfigDraft
+      tags: [Scopes]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopeDraftInput' }
+      responses:
+        '200':
+          description: Updated scope draft
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeDraft' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/versions:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    get:
+      operationId: listScopeConfigVersions
+      tags: [Publishing]
+      responses:
+        '200': { $ref: '#/components/responses/ConfigVersionList' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/groups:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    get:
+      operationId: listScopeGroups
+      tags: [Entitlements]
+      responses:
+        '200':
+          description: Groups and memberships in the scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, members]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Group' } }
+                  members: { type: array, items: { $ref: '#/components/schemas/GroupMember' } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createScopeGroup
+      tags: [Entitlements]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupInput' }
+      responses:
+        '201':
+          description: Group created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Group' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/groups/{groupId}:
+    parameters:
+      - { $ref: '#/components/parameters/ScopeId' }
+      - { $ref: '#/components/parameters/GroupId' }
+    delete:
+      operationId: deleteScopeGroup
+      tags: [Entitlements]
+      responses:
+        '204': { description: Group deleted }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/groups/{groupId}/members/{subjectId}:
+    parameters:
+      - { $ref: '#/components/parameters/ScopeId' }
+      - { $ref: '#/components/parameters/GroupId' }
+      - { $ref: '#/components/parameters/SubjectId' }
+    put:
+      operationId: putGroupMember
+      tags: [Entitlements]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [memberKind]
+              properties:
+                memberKind: { $ref: '#/components/schemas/SubjectKind' }
+      responses:
+        '200':
+          description: Membership created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMember' }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      operationId: deleteGroupMember
+      tags: [Entitlements]
+      responses:
+        '204': { description: Membership deleted }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/bindings:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    get:
+      operationId: listScopeBindings
+      tags: [Entitlements]
+      responses:
+        '200': { $ref: '#/components/responses/BindingList' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createScopeBinding
+      tags: [Entitlements]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BindingInput' }
+      responses:
+        '201':
+          description: Binding created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Binding' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/bindings/{bindingId}:
+    parameters:
+      - { $ref: '#/components/parameters/ScopeId' }
+      - { $ref: '#/components/parameters/BindingId' }
+    delete:
+      operationId: deleteScopeBinding
+      tags: [Entitlements]
+      responses:
+        '204': { description: Binding deleted }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/path-grants:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    get:
+      operationId: listScopePathGrants
+      tags: [Entitlements]
+      responses:
+        '200': { $ref: '#/components/responses/PathGrantList' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createScopePathGrant
+      tags: [Entitlements]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PathGrantInput' }
+      responses:
+        '201':
+          description: Path grant created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PathGrant' }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/path-grants/{pathGrantId}:
+    parameters:
+      - { $ref: '#/components/parameters/ScopeId' }
+      - { $ref: '#/components/parameters/PathGrantId' }
+    delete:
+      operationId: deleteScopePathGrant
+      tags: [Entitlements]
+      responses:
+        '204': { description: Path grant deleted }
+        default: { $ref: '#/components/responses/Error' }
+  /scopes/{scopeId}/publish:
+    parameters: [{ $ref: '#/components/parameters/ScopeId' }]
+    post:
+      operationId: publishScopeConfig
+      tags: [Publishing]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/PublishResult' }
+        default: { $ref: '#/components/responses/Error' }
+  /simulations:
+    post:
+      operationId: simulateAuthorization
+      tags: [Entitlements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SimulationRequest' }
+      responses:
+        '200':
+          description: Projected authorization result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimulationResult' }
+        default: { $ref: '#/components/responses/Error' }
+  /audit-events:
+    get:
+      operationId: listAuditEvents
+      tags: [Audit]
+      parameters:
+        - name: serviceId
+          in: query
+          schema: { $ref: '#/components/schemas/Identifier' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200': { $ref: '#/components/responses/AuditEventList' }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by the companion authentication service. The authorization gateway enforces management actions before proxying.
+  parameters:
+    ServiceId: { name: serviceId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    ServiceIdQuery: { name: serviceId, in: query, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    SubjectId: { name: subjectId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    ScopeId: { name: scopeId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    GroupId: { name: groupId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    BindingId: { name: bindingId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    PathGrantId: { name: pathGrantId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409.
+      schema: { type: string, maxLength: 128 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Expected vocabulary version, such as `"3"`.
+      schema: { type: string }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+  responses:
+    Error:
+      description: Structured error response
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Service:
+      description: Managed service
+      content: { application/json: { schema: { $ref: '#/components/schemas/ManagedService' } } }
+    ServiceList:
+      description: Managed services
+      content: { application/json: { schema: { $ref: '#/components/schemas/ServiceList' } } }
+    Vocabulary:
+      description: Service authorization vocabulary
+      content: { application/json: { schema: { $ref: '#/components/schemas/ServiceVocabulary' } } }
+    Subject:
+      description: Authorizable subject
+      content: { application/json: { schema: { $ref: '#/components/schemas/Subject' } } }
+    SubjectList:
+      description: Authorizable subjects
+      content: { application/json: { schema: { $ref: '#/components/schemas/SubjectList' } } }
+    Scope:
+      description: Authorization scope
+      content: { application/json: { schema: { $ref: '#/components/schemas/Scope' } } }
+    ScopeList:
+      description: Authorization scopes
+      content: { application/json: { schema: { $ref: '#/components/schemas/ScopeList' } } }
+    BindingList:
+      description: Scope bindings
+      content: { application/json: { schema: { $ref: '#/components/schemas/BindingList' } } }
+    PathGrantList:
+      description: Named path definitions
+      content: { application/json: { schema: { $ref: '#/components/schemas/PathGrantList' } } }
+    ConfigVersionList:
+      description: Immutable configuration versions
+      content: { application/json: { schema: { $ref: '#/components/schemas/ConfigVersionList' } } }
+    AuditEventList:
+      description: Audit history, newest first
+      content: { application/json: { schema: { $ref: '#/components/schemas/AuditEventList' } } }
+    PublishResult:
+      description: Published artifact keys and active version
+      content: { application/json: { schema: { $ref: '#/components/schemas/PublishResult' } } }
+  schemas:
+    Identifier: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,127}$' }
+    Timestamp: { type: string, format: date-time }
+    Health:
+      type: object
+      required: [status, service]
+      properties: { status: { const: ok }, service: { const: management } }
+    SubjectKind: { type: string, enum: [User, ServiceAccount, Group] }
+    SubjectStatus: { type: string, enum: [active, suspended, disabled] }
+    ScopeTypeDefinition:
+      type: object
+      required: [id]
+      properties: { id: { $ref: '#/components/schemas/Identifier' }, name: { type: string }, description: { type: string } }
+    ScopeHierarchyEdge:
+      type: object
+      required: [parentType, childType]
+      properties: { parentType: { $ref: '#/components/schemas/Identifier' }, childType: { $ref: '#/components/schemas/Identifier' } }
+    ResourceTypeDefinition:
+      type: object
+      required: [id]
+      properties:
+        id: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        scopeTypes: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Identifier' } }
+    PathSpaceDefinition:
+      type: object
+      required: [id, anchorKind]
+      properties:
+        id: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        anchorKind: { type: string, enum: [service, resource] }
+        resourceType: { $ref: '#/components/schemas/Identifier' }
+        routePattern: { type: string }
+    PermissionProfile:
+      type: object
+      required: [id, permissions]
+      properties:
+        id: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        permissions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [id]
+            properties: { id: { $ref: '#/components/schemas/Identifier' }, name: { type: string } }
+    Grant:
+      type: object
+      required: [permissionProfile, permissionId, targetKind]
+      properties:
+        permissionProfile: { $ref: '#/components/schemas/Identifier' }
+        permissionId: { $ref: '#/components/schemas/Identifier' }
+        targetKind: { type: string, enum: [scope, resource, path] }
+        resourceType: { $ref: '#/components/schemas/Identifier' }
+        pathSpace: { $ref: '#/components/schemas/Identifier' }
+    Action:
+      allOf:
+        - { $ref: '#/components/schemas/Grant' }
+        - type: object
+          required: [id]
+          properties:
+            id: { $ref: '#/components/schemas/Identifier' }
+            name: { type: string }
+            operations:
+              type: array
+              items:
+                type: object
+                required: [method, path]
+                properties: { method: { type: string }, path: { type: string }, operationId: { type: string } }
+    RoleTemplate:
+      type: object
+      required: [id, name, grants]
+      properties:
+        id: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        description: { type: string }
+        grants: { type: array, items: { $ref: '#/components/schemas/Grant' } }
+    ClaimConventions:
+      type: object
+      required: [scopeReference, authorizationClaim, authorizationVersion]
+      properties:
+        scopeReference: { type: string, enum: [scopeId, claimId] }
+        authorizationClaim: { const: azs }
+        authorizationVersion: { const: 1 }
+    ServiceVocabulary:
+      type: object
+      required: [serviceId, version, scopeTypes, scopeHierarchy, resourceTypes, pathSpaces, actions, permissionProfiles, roleTemplates, subjectKinds, claimConventions, updatedAt]
+      properties:
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        version: { type: integer, minimum: 1 }
+        scopeTypes: { type: array, items: { $ref: '#/components/schemas/ScopeTypeDefinition' } }
+        scopeHierarchy: { type: array, items: { $ref: '#/components/schemas/ScopeHierarchyEdge' } }
+        resourceTypes: { type: array, items: { $ref: '#/components/schemas/ResourceTypeDefinition' } }
+        pathSpaces: { type: array, items: { $ref: '#/components/schemas/PathSpaceDefinition' } }
+        actions: { type: array, items: { $ref: '#/components/schemas/Action' } }
+        permissionProfiles: { type: array, items: { $ref: '#/components/schemas/PermissionProfile' } }
+        roleTemplates: { type: array, minItems: 1, items: { $ref: '#/components/schemas/RoleTemplate' } }
+        subjectKinds: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/SubjectKind' } }
+        claimConventions: { $ref: '#/components/schemas/ClaimConventions' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+    ManagedService:
+      type: object
+      required: [serviceId, name, vocabulary, createdAt, updatedAt]
+      properties:
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        description: { type: string }
+        vocabulary: { $ref: '#/components/schemas/ServiceVocabulary' }
+        activeServiceVersion: { type: string }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+    CreateServiceRequest:
+      type: object
+      required: [serviceId, name, vocabulary]
+      properties:
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        description: { type: string }
+        vocabulary: { $ref: '#/components/schemas/ServiceVocabulary' }
+    SubjectInput:
+      type: object
+      required: [subjectId, kind, displayName, status]
+      properties:
+        subjectId: { $ref: '#/components/schemas/Identifier' }
+        kind: { type: string, enum: [User, ServiceAccount] }
+        displayName: { type: string }
+        email: { type: string, format: email }
+        status: { $ref: '#/components/schemas/SubjectStatus' }
+        metadata: { type: object, additionalProperties: true }
+    Subject:
+      allOf:
+        - { $ref: '#/components/schemas/SubjectInput' }
+        - { $ref: '#/components/schemas/Timestamps' }
+    SubjectPatch:
+      type: object
+      properties:
+        displayName: { type: string }
+        email: { type: string, format: email }
+        status: { $ref: '#/components/schemas/SubjectStatus' }
+        metadata: { type: object, additionalProperties: true }
+    ScopeInput:
+      type: object
+      required: [scopeId, serviceId, scopeType, name]
+      properties:
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        scopeType: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        parentScopeId: { $ref: '#/components/schemas/Identifier' }
+        claimId: { $ref: '#/components/schemas/Identifier' }
+        metadata: { type: object, additionalProperties: true }
+    Scope:
+      allOf:
+        - { $ref: '#/components/schemas/ScopeInput' }
+        - type: object
+          properties: { activeVersion: { type: string } }
+        - { $ref: '#/components/schemas/Timestamps' }
+    ScopePatch:
+      type: object
+      properties:
+        scopeType: { $ref: '#/components/schemas/Identifier' }
+        name: { type: string }
+        parentScopeId: { $ref: '#/components/schemas/Identifier' }
+        claimId: { $ref: '#/components/schemas/Identifier' }
+        metadata: { type: object, additionalProperties: true }
+    GroupInput:
+      type: object
+      required: [groupId, name]
+      properties: { groupId: { $ref: '#/components/schemas/Identifier' }, name: { type: string }, description: { type: string } }
+    Group:
+      allOf:
+        - { $ref: '#/components/schemas/GroupInput' }
+        - type: object
+          required: [scopeId]
+          properties: { scopeId: { $ref: '#/components/schemas/Identifier' } }
+        - { $ref: '#/components/schemas/Timestamps' }
+    GroupMember:
+      type: object
+      required: [groupId, memberId, memberKind, createdAt]
+      properties:
+        groupId: { $ref: '#/components/schemas/Identifier' }
+        memberId: { $ref: '#/components/schemas/Identifier' }
+        memberKind: { $ref: '#/components/schemas/SubjectKind' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    BindingInput:
+      type: object
+      required: [bindingId, subjectId, subjectKind]
+      properties:
+        bindingId: { $ref: '#/components/schemas/Identifier' }
+        subjectId: { $ref: '#/components/schemas/Identifier' }
+        subjectKind: { $ref: '#/components/schemas/SubjectKind' }
+        roleId: { $ref: '#/components/schemas/Identifier' }
+        permissionProfile: { $ref: '#/components/schemas/Identifier' }
+        permissionId: { $ref: '#/components/schemas/Identifier' }
+        resourceType: { $ref: '#/components/schemas/Identifier' }
+        pathSpace: { $ref: '#/components/schemas/Identifier' }
+        namedPath: { $ref: '#/components/schemas/Identifier' }
+        inlinePathPrefix: { type: string }
+    Binding:
+      allOf:
+        - { $ref: '#/components/schemas/BindingInput' }
+        - type: object
+          required: [scopeId]
+          properties: { scopeId: { $ref: '#/components/schemas/Identifier' } }
+        - { $ref: '#/components/schemas/Timestamps' }
+    PathGrantInput:
+      type: object
+      required: [pathGrantId, name, pathSpace, prefix, permissions]
+      properties:
+        pathGrantId: { $ref: '#/components/schemas/Identifier' }
+        name: { $ref: '#/components/schemas/Identifier' }
+        pathSpace: { $ref: '#/components/schemas/Identifier' }
+        prefix: { type: string }
+        permissions: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Identifier' } }
+        anchorResourceType: { $ref: '#/components/schemas/Identifier' }
+        anchorResourceId: { $ref: '#/components/schemas/Identifier' }
+    PathGrant:
+      allOf:
+        - { $ref: '#/components/schemas/PathGrantInput' }
+        - type: object
+          required: [scopeId]
+          properties: { scopeId: { $ref: '#/components/schemas/Identifier' } }
+        - { $ref: '#/components/schemas/Timestamps' }
+    ServiceDraftInput:
+      type: object
+      required: [snippets, namedPaths, metadata]
+      properties:
+        openApiDocument: { type: object, additionalProperties: true }
+        authDescriptor: { type: object, additionalProperties: true }
+        schema: { type: object, additionalProperties: true }
+        snippets: { type: object, additionalProperties: { type: string } }
+        globalPolicy: { type: string }
+        namedPaths: { type: object, additionalProperties: true }
+        metadata: { type: object, additionalProperties: true }
+    ServiceDraft:
+      allOf:
+        - { $ref: '#/components/schemas/ServiceDraftInput' }
+        - type: object
+          required: [serviceId, updatedAt]
+          properties: { serviceId: { $ref: '#/components/schemas/Identifier' }, updatedAt: { $ref: '#/components/schemas/Timestamp' } }
+    ScopeDraftInput:
+      type: object
+      required: [includes, namedPaths, staticEntities, metadata]
+      properties:
+        includes: { type: array, items: { $ref: '#/components/schemas/Identifier' } }
+        policy: { type: string }
+        namedPaths: { type: object, additionalProperties: true }
+        staticEntities: { type: array, items: { type: object, additionalProperties: true } }
+        metadata: { type: object, additionalProperties: true }
+    ScopeDraft:
+      allOf:
+        - { $ref: '#/components/schemas/ScopeDraftInput' }
+        - type: object
+          required: [scopeId, updatedAt]
+          properties: { scopeId: { $ref: '#/components/schemas/Identifier' }, updatedAt: { $ref: '#/components/schemas/Timestamp' } }
+    OpenApiImportResult:
+      type: object
+      required: [vocabulary, authDescriptor, warnings]
+      properties:
+        vocabulary: { $ref: '#/components/schemas/ServiceVocabulary' }
+        authDescriptor: { type: object, additionalProperties: true }
+        warnings: { type: array, items: { type: string } }
+    PublishRequest:
+      type: object
+      properties: { version: { type: string, pattern: '^[A-Za-z0-9_.:-]+$' } }
+    PublishResult:
+      type: object
+      required: [ok, serviceId, version, manifestKey, configKey]
+      properties:
+        ok: { const: true }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        version: { type: string }
+        manifestKey: { type: string }
+        configKey: { type: string }
+    ConfigVersion:
+      type: object
+      required: [versionId, serviceId, artifactKey, artifact, status, createdBy, createdAt]
+      properties:
+        versionId: { type: string }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        artifactKey: { type: string }
+        artifact: {}
+        status: { type: string, enum: [draft, pending, published, rejected, superseded] }
+        createdBy: { $ref: '#/components/schemas/Identifier' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        publishedAt: { $ref: '#/components/schemas/Timestamp' }
+    ClaimPreview:
+      type: object
+      required: [subjectId, serviceId, azv, azs]
+      properties:
+        subjectId: { $ref: '#/components/schemas/Identifier' }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        azv: { const: 1 }
+        azs: { type: array, items: { type: string } }
+    SimulationRequest:
+      type: object
+      required: [serviceId, scopeId, subjectId, actionId]
+      properties:
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        subjectId: { $ref: '#/components/schemas/Identifier' }
+        actionId: { $ref: '#/components/schemas/Identifier' }
+        path: { type: string }
+    SimulationResult:
+      type: object
+      required: [decision, reasons, matchedBindingIds]
+      properties:
+        decision: { type: string, enum: [allow, deny] }
+        reasons: { type: array, items: { type: string } }
+        matchedBindingIds: { type: array, items: { $ref: '#/components/schemas/Identifier' } }
+    AuditEvent:
+      type: object
+      required: [eventId, actorId, action, targetType, targetId, createdAt]
+      properties:
+        eventId: { type: string, format: uuid }
+        actorId: { $ref: '#/components/schemas/Identifier' }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        detail: { type: object, additionalProperties: true }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, version_conflict, idempotency_conflict, validation_failed, vocabulary_violation, config_incomplete, publish_conflict, publish_failed, internal_error]
+            message: { type: string }
+            details: {}
+    Timestamps:
+      type: object
+      required: [createdAt, updatedAt]
+      properties: { createdAt: { $ref: '#/components/schemas/Timestamp' }, updatedAt: { $ref: '#/components/schemas/Timestamp' } }
+    ServiceList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ManagedService' } }, nextCursor: { type: string } } }
+    SubjectList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Subject' } }, nextCursor: { type: string } } }
+    ScopeList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Scope' } }, nextCursor: { type: string } } }
+    BindingList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Binding' } }, nextCursor: { type: string } } }
+    PathGrantList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/PathGrant' } }, nextCursor: { type: string } } }
+    ConfigVersionList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ConfigVersion' } }, nextCursor: { type: string } } }
+    AuditEventList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }, nextCursor: { type: string } } }

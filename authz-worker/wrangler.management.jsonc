@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "authz-management-service",
+  "main": "src/management/worker.ts",
+  "compatibility_date": "2026-04-05",
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.yaml"],
+      "fallthrough": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "CONTROL_DB",
+      "database_name": "authz-control-plane",
+      "database_id": "replace-with-d1-database-id",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "POLICY_BUCKET",
+      "bucket_name": "authz-policy-bucket"
+    }
+  ],
+  "vars": {
+    "CORS_ORIGIN": "http://127.0.0.1:5173",
+    "AUTHZ_ADMIN_URL": "http://127.0.0.1:8791"
+  }
+}

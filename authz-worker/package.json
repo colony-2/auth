@@ -6,11 +6,16 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:authn": "wrangler dev --config wrangler.authn.jsonc --port 8788",
+    "dev:management": "wrangler dev --config wrangler.management.jsonc --port 8789",
     "deploy:authn": "wrangler deploy --config wrangler.authn.jsonc",
     "deploy:authn:dry-run": "wrangler deploy --dry-run --config wrangler.authn.jsonc",
+    "deploy:management": "wrangler deploy --config wrangler.management.jsonc",
+    "deploy:management:dry-run": "wrangler deploy --dry-run --config wrangler.management.jsonc",
     "deploy:dry-run": "wrangler deploy --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:contract": "vitest run tests/management/openapi-contract.test.ts",
+    "generate:management-client": "openapi-typescript openapi/management-service.openapi.yaml -o src/management/generated-api.ts",
     "test:integration": "node scripts/test-worker.mjs",
     "postinstall": "node scripts/postinstall.mjs"
   },
@@ -22,6 +27,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260405.1",
     "@types/node": "^24.3.0",
+    "openapi-typescript": "^7.9.1",
     "typescript": "5.9.3",
     "vitest": "^3.2.4",
     "wrangler": "4.80.0"
