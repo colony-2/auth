@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "authn-service",
+  "main": "src/authn/worker.ts",
+  "compatibility_date": "2026-04-05",
+  "d1_databases": [
+    {
+      "binding": "CONTROL_DB",
+      "database_name": "authz-control-plane",
+      "database_id": "replace-with-d1-database-id",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "JWT_ISSUER": "http://127.0.0.1:8788/",
+    "JWT_KEY_ID": "local-es256-1",
+    "JWT_ALGORITHM": "ES256",
+    "ALLOWED_AUDIENCES": "projects-api",
+    "ACCESS_TOKEN_SECONDS": "600",
+    "REFRESH_TOKEN_SECONDS": "2592000",
+    "MAX_SCOPE_CLAIMS": "64",
+    "CORS_ORIGIN": "http://127.0.0.1:5173"
+  }
+}

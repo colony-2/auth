@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:authn": "wrangler dev --config wrangler.authn.jsonc --port 8788",
+    "deploy:authn": "wrangler deploy --config wrangler.authn.jsonc",
+    "deploy:authn:dry-run": "wrangler deploy --dry-run --config wrangler.authn.jsonc",
     "deploy:dry-run": "wrangler deploy --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
