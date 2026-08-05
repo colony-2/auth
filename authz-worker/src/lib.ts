@@ -14,7 +14,7 @@ import {
   type Schema,
   type StatefulAuthorizationCall,
 } from "@cedar-policy/cedar-wasm/web";
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+import { createRemoteJWKSet, customFetch, jwtVerify, type JWTPayload } from "jose";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import cedarWasmModule from "./cedar_wasm_bg.wasm";
@@ -104,6 +104,7 @@ interface ResolvedAuthzRuntimeEnv {
   MAX_SERVICE_CONFIG_CACHE_ENTRIES: string;
   MAX_SCOPE_CONFIG_CACHE_ENTRIES: string;
   MAX_EFFECTIVE_POLICY_CACHE_ENTRIES: string;
+  AUTHN?: Fetcher;
 }
 
 interface ResolvedAuthzAdminEnv extends ResolvedAuthzRuntimeEnv {
@@ -124,6 +125,8 @@ export interface AuthzProxyEnv {
   MAX_SERVICE_CONFIG_CACHE_ENTRIES?: string;
   MAX_SCOPE_CONFIG_CACHE_ENTRIES?: string;
   MAX_EFFECTIVE_POLICY_CACHE_ENTRIES?: string;
+  AUTHN?: Fetcher;
+  UPSTREAM?: Fetcher;
 }
 
 export interface AuthzAdminEnv extends AuthzProxyEnv {
@@ -606,6 +609,7 @@ let jwtVerifierConfigCache:
       raw: string;
       parsed: JwtVerifierConfig;
       jwks?: ReturnType<typeof createRemoteJWKSet>;
+      fetcher?: Fetcher;
     }
   | undefined;
 
@@ -946,6 +950,7 @@ function resolveProxyRuntimeEnv(env: AuthzProxyEnv): ResolvedAuthzRuntimeEnv {
     MAX_SERVICE_CONFIG_CACHE_ENTRIES: env.MAX_SERVICE_CONFIG_CACHE_ENTRIES ?? "16",
     MAX_SCOPE_CONFIG_CACHE_ENTRIES: env.MAX_SCOPE_CONFIG_CACHE_ENTRIES ?? "32",
     MAX_EFFECTIVE_POLICY_CACHE_ENTRIES: env.MAX_EFFECTIVE_POLICY_CACHE_ENTRIES ?? "16",
+    ...(env.AUTHN ? { AUTHN: env.AUTHN } : {}),
   };
 }
 
@@ -1354,7 +1359,7 @@ async function verifyJwt(request: Request, env: ResolvedAuthzRuntimeEnv): Promis
     throw jsonResponse({ error: "missing bearer token" }, { status: 401 });
   }
 
-  const verifier = parseJwtVerifierConfig(env.JWT_VERIFIER);
+  const verifier = parseJwtVerifierConfig(env.JWT_VERIFIER, env.AUTHN);
   const jwtOptions = {
     ...(verifier.parsed.issuer ? { issuer: verifier.parsed.issuer } : {}),
     ...(verifier.parsed.audience ? { audience: verifier.parsed.audience } : {}),
@@ -2028,11 +2033,11 @@ function parseScopeResolution(raw: string): ScopeResolver[] {
   return parsed;
 }
 
-function parseJwtVerifierConfig(raw: string): {
+function parseJwtVerifierConfig(raw: string, fetcher?: Fetcher): {
   parsed: JwtVerifierConfig;
   jwks?: ReturnType<typeof createRemoteJWKSet>;
 } {
-  if (jwtVerifierConfigCache && jwtVerifierConfigCache.raw === raw) {
+  if (jwtVerifierConfigCache && jwtVerifierConfigCache.raw === raw && jwtVerifierConfigCache.fetcher === fetcher) {
     return jwtVerifierConfigCache;
   }
 
@@ -2050,7 +2055,9 @@ function parseJwtVerifierConfig(raw: string): {
     if (!parsed.jwksUrl || typeof parsed.jwksUrl !== "string") {
       throw new Error("JWT_VERIFIER jwks config must include jwksUrl");
     }
-    jwks = createRemoteJWKSet(new URL(parsed.jwksUrl));
+    jwks = createRemoteJWKSet(new URL(parsed.jwksUrl), fetcher ? {
+      [customFetch]: (url, options) => fetcher.fetch(url, options),
+    } : undefined);
   } else {
     throw new Error("JWT_VERIFIER type must be hs256 or jwks");
   }
@@ -2059,6 +2066,7 @@ function parseJwtVerifierConfig(raw: string): {
     raw,
     parsed,
     ...(jwks ? { jwks } : {}),
+    ...(fetcher ? { fetcher } : {}),
   };
   return jwtVerifierConfigCache;
 }
@@ -2703,7 +2711,7 @@ async function resolveUpstreamUrl<Env extends { UPSTREAM_ORIGIN?: string }>(
   return new URL(new URL(request.url).pathname + new URL(request.url).search, env.UPSTREAM_ORIGIN);
 }
 
-async function proxyRequest<Env extends { UPSTREAM_ORIGIN?: string }>(
+async function proxyRequest<Env extends { UPSTREAM_ORIGIN?: string; UPSTREAM?: Fetcher }>(
   request: Request,
   env: Env,
   options: AuthzRuntimeOptions<Env>,
@@ -2715,10 +2723,10 @@ async function proxyRequest<Env extends { UPSTREAM_ORIGIN?: string }>(
   const proxiedRequest = new Request(forwarded, {
     headers,
   });
-  return await fetch(proxiedRequest);
+  return await (env.UPSTREAM ? env.UPSTREAM.fetch(proxiedRequest) : fetch(proxiedRequest));
 }
 
-async function passthroughRequest<Env extends { UPSTREAM_ORIGIN?: string }>(
+async function passthroughRequest<Env extends { UPSTREAM_ORIGIN?: string; UPSTREAM?: Fetcher }>(
   request: Request,
   env: Env,
 ): Promise<Response> {
@@ -2726,15 +2734,14 @@ async function passthroughRequest<Env extends { UPSTREAM_ORIGIN?: string }>(
     return new Response("not found", { status: 404 });
   }
 
-  return await fetch(
-    new Request(
-      new URL(new URL(request.url).pathname + new URL(request.url).search, env.UPSTREAM_ORIGIN).toString(),
-      request,
-    ),
+  const upstreamRequest = new Request(
+    new URL(new URL(request.url).pathname + new URL(request.url).search, env.UPSTREAM_ORIGIN).toString(),
+    request,
   );
+  return await (env.UPSTREAM ? env.UPSTREAM.fetch(upstreamRequest) : fetch(upstreamRequest));
 }
 
-export function createAuthzProxy<Env extends AuthzProxyEnv & { UPSTREAM_ORIGIN?: string }>(
+export function createAuthzProxy<Env extends AuthzProxyEnv & { UPSTREAM_ORIGIN?: string; UPSTREAM?: Fetcher }>(
   options: AuthzRuntimeOptions<Env> = {},
 ): ExportedHandler<Env> {
   return {

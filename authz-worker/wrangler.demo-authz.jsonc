@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "project-workspace-authz-gateway",
+  "main": "src/test-proxy.ts",
+  "compatibility_date": "2026-04-05",
+  "r2_buckets": [
+    {
+      "binding": "POLICY_BUCKET",
+      "bucket_name": "authz-policy-bucket"
+    }
+  ],
+  "vars": {
+    "SERVICE_IDENTIFIER": "projects-api",
+    "JWKS_URL": "http://127.0.0.1:8788/.well-known/jwks.json",
+    "JWT_ISSUER": "http://127.0.0.1:8788/",
+    "UPSTREAM_ORIGIN": "http://127.0.0.1:8790",
+    "SCOPE_RESOLUTION": "[{\"type\":\"header\",\"header\":\"x-scope-id\",\"pattern\":\"^(?<scopeId>[A-Za-z0-9_-]+)$\"}]",
+    "MANIFEST_TTL_SECONDS": "1",
+    "SERVICE_CONFIG_TTL_SECONDS": "1",
+    "SCOPE_CONFIG_TTL_SECONDS": "1",
+    "EFFECTIVE_POLICY_TTL_SECONDS": "1",
+    "ADMIN_TOKEN": "local-authz-admin-token"
+  }
+}

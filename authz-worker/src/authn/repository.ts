@@ -6,6 +6,7 @@ import type {
   RefreshSession,
   ServiceAccountCredential,
 } from "./types";
+import { decodeCompactScopeClaim } from "./claims";
 
 export interface AuthnRepository {
   findIdentityByUsername(username: string): Promise<Identity | undefined>;
@@ -22,6 +23,39 @@ export interface AuthnRepository {
   revokeRefreshSessionByHash(tokenHash: string, at: string): Promise<boolean>;
   entitlementsFor(subjectId: string, serviceId: string): Promise<EffectiveScopeEntitlement[]>;
   recordAuthEvent(subjectId: string, action: string, detail?: Record<string, unknown>): Promise<void>;
+}
+
+export class RemoteEntitlementAuthnRepository implements AuthnRepository {
+  constructor(
+    private readonly delegate: AuthnRepository,
+    private readonly managementUrl: string,
+    private readonly managementToken: string,
+    private readonly managementFetcher?: Fetcher,
+  ) {}
+
+  findIdentityByUsername = (username: string) => this.delegate.findIdentityByUsername(username);
+  getIdentityBySubject = (subjectId: string) => this.delegate.getIdentityBySubject(subjectId);
+  putIdentity = (identity: Identity) => this.delegate.putIdentity(identity);
+  getSubject = (subjectId: string) => this.delegate.getSubject(subjectId);
+  putSubject = (subject: Subject) => this.delegate.putSubject(subject);
+  listServiceAccountCredentials = (subjectId: string) => this.delegate.listServiceAccountCredentials(subjectId);
+  putServiceAccountCredential = (credential: ServiceAccountCredential) => this.delegate.putServiceAccountCredential(credential);
+  putRefreshSession = (session: RefreshSession) => this.delegate.putRefreshSession(session);
+  findRefreshSession = (tokenHash: string) => this.delegate.findRefreshSession(tokenHash);
+  listRefreshSessions = (subjectId: string) => this.delegate.listRefreshSessions(subjectId);
+  revokeRefreshSession = (sessionId: string, at: string) => this.delegate.revokeRefreshSession(sessionId, at);
+  revokeRefreshSessionByHash = (tokenHash: string, at: string) => this.delegate.revokeRefreshSessionByHash(tokenHash, at);
+  recordAuthEvent = (subjectId: string, action: string, detail?: Record<string, unknown>) => this.delegate.recordAuthEvent(subjectId, action, detail);
+
+  async entitlementsFor(subjectId: string, serviceId: string): Promise<EffectiveScopeEntitlement[]> {
+    const response = await (this.managementFetcher?.fetch.bind(this.managementFetcher) ?? fetch)(
+      `${this.managementUrl.replace(/\/$/, "")}/services/${encodeURIComponent(serviceId)}/subjects/${encodeURIComponent(subjectId)}/claim-preview`,
+      { headers: { authorization: `Bearer ${this.managementToken}` } },
+    );
+    if (!response.ok) throw new Error(`management claim projection failed with ${response.status}`);
+    const value = await response.json<{ azs?: string[] }>();
+    return (value.azs ?? []).map(decodeCompactScopeClaim);
+  }
 }
 
 function copy<T>(value: T): T {

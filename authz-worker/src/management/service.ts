@@ -51,7 +51,7 @@ export class ManagementService {
     options: ManagementServiceOptions = {},
   ) {
     this.now = options.now ?? Date.now;
-    this.id = options.id ?? crypto.randomUUID;
+    this.id = options.id ?? (() => crypto.randomUUID());
   }
 
   async createService(input: { serviceId: string; name: string; description?: string; vocabulary: ServiceVocabulary }, actorId: string): Promise<ManagedService> {

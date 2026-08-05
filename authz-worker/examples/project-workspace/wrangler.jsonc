@@ -1,0 +1,6 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "project-workspace-demo-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-04-05"
+}

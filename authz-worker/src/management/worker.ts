@@ -13,6 +13,7 @@ export interface ManagementWorkerEnv {
   MANAGEMENT_BOOTSTRAP_TOKEN: string;
   AUTHZ_ADMIN_URL?: string;
   AUTHZ_ADMIN_TOKEN?: string;
+  AUTHZ_ADMIN?: Fetcher;
   CORS_ORIGIN?: string;
 }
 
@@ -100,6 +101,7 @@ async function route(request: Request, env: ManagementWorkerEnv, actorId: string
     bucket: env.POLICY_BUCKET,
     ...(env.AUTHZ_ADMIN_URL ? { authzAdminUrl: env.AUTHZ_ADMIN_URL } : {}),
     ...(env.AUTHZ_ADMIN_TOKEN ? { authzAdminToken: env.AUTHZ_ADMIN_TOKEN } : {}),
+    ...(env.AUTHZ_ADMIN ? { authzAdminFetcher: env.AUTHZ_ADMIN } : {}),
   });
   const service = new ManagementService(repository, publisher);
   const { pathname } = url;

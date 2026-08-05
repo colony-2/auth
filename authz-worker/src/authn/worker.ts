@@ -1,6 +1,6 @@
-import { D1AuthnRepository } from "./repository";
+import { D1AuthnRepository, RemoteEntitlementAuthnRepository, type AuthnRepository } from "./repository";
 import { AuthenticationService, AuthnError } from "./service";
-import { sha256 } from "./crypto";
+import { hashPassword, sha256 } from "./crypto";
 import type { AuthnConfig, PublicJwk, RequestMetadata } from "./types";
 
 export interface AuthnWorkerEnv {
@@ -17,6 +17,10 @@ export interface AuthnWorkerEnv {
   INTERNAL_AUTH_TOKEN: string;
   IP_HASH_SECRET: string;
   CORS_ORIGIN?: string;
+  BOOTSTRAP_ENABLED?: string;
+  MANAGEMENT_API_URL?: string;
+  MANAGEMENT_API_TOKEN?: string;
+  MANAGEMENT_API?: Fetcher;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -88,7 +92,15 @@ export async function handleAuthnRequest(request: Request, env: AuthnWorkerEnv):
   const origin = env.CORS_ORIGIN ?? "";
   if (request.method === "OPTIONS") return json({}, { status: 204 }, origin);
   const url = new URL(request.url);
-  const repository = new D1AuthnRepository(env.CONTROL_DB);
+  let repository: AuthnRepository = new D1AuthnRepository(env.CONTROL_DB);
+  if (env.MANAGEMENT_API_URL && env.MANAGEMENT_API_TOKEN) {
+    repository = new RemoteEntitlementAuthnRepository(
+      repository,
+      env.MANAGEMENT_API_URL,
+      env.MANAGEMENT_API_TOKEN,
+      env.MANAGEMENT_API,
+    );
+  }
   const service = new AuthenticationService(repository, configFromEnv(env));
 
   try {
@@ -123,6 +135,37 @@ export async function handleAuthnRequest(request: Request, env: AuthnWorkerEnv):
       const body = await jsonBody<{ token?: string }>(request);
       if (!body.token) throw new AuthnError("invalid_request", "token is required");
       return json(await service.introspect(body.token), {}, origin);
+    }
+    if (request.method === "POST" && url.pathname === "/internal/bootstrap") {
+      if (env.BOOTSTRAP_ENABLED !== "true" || request.headers.get("x-internal-auth-token") !== env.INTERNAL_AUTH_TOKEN) {
+        throw new AuthnError("invalid_token", "bootstrap is disabled", 404);
+      }
+      const input = await jsonBody<{
+        users?: Array<{ subjectId: string; username: string; password: string; displayName: string; email?: string; status?: "active" | "suspended" | "disabled" }>;
+        serviceAccounts?: Array<{ subjectId: string; clientSecret: string; displayName: string }>;
+      }>(request);
+      const now = new Date().toISOString();
+      for (const user of input.users ?? []) {
+        await repository.putSubject({
+          subjectId: user.subjectId, kind: "User", displayName: user.displayName,
+          ...(user.email ? { email: user.email } : {}), status: user.status ?? "active", createdAt: now, updatedAt: now,
+        });
+        await repository.putIdentity({
+          identityId: `identity-${user.subjectId}`, subjectId: user.subjectId, username: user.username,
+          passwordHash: await hashPassword(user.password), mfaEnabled: false, createdAt: now, updatedAt: now,
+        });
+      }
+      for (const account of input.serviceAccounts ?? []) {
+        await repository.putSubject({
+          subjectId: account.subjectId, kind: "ServiceAccount", displayName: account.displayName,
+          status: "active", createdAt: now, updatedAt: now,
+        });
+        await repository.putServiceAccountCredential({
+          credentialId: `credential-${account.subjectId}`, subjectId: account.subjectId,
+          secretHash: await hashPassword(account.clientSecret), label: "demo", createdAt: now,
+        });
+      }
+      return json({ ok: true, users: input.users?.length ?? 0, serviceAccounts: input.serviceAccounts?.length ?? 0 }, {}, origin);
     }
     const serviceAccountMatch = url.pathname.match(/^\/service-accounts\/([^/]+)\/tokens$/);
     if (request.method === "POST" && serviceAccountMatch) {

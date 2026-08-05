@@ -52,18 +52,25 @@ export interface R2PublisherConfig {
   bucket: R2Bucket;
   authzAdminUrl?: string;
   authzAdminToken?: string;
+  authzAdminFetcher?: Fetcher;
 }
 
 export class R2ManagementPublisher implements ManagementPublisher {
   constructor(private readonly config: R2PublisherConfig) {}
 
   async publishService(serviceId: string, config: PublishServiceConfigRequest): Promise<PublishResult> {
+    if (this.config.authzAdminUrl && this.config.authzAdminToken) {
+      return this.remotePublish(serviceId, "/internal/service-config/publish", config);
+    }
     const { publishServiceConfig } = await import("../lib");
     const response = await publishServiceConfig(config, this.runtime(serviceId));
     return this.result(response, serviceId);
   }
 
   async publishScope(serviceId: string, config: PublishScopeConfigRequest): Promise<PublishResult> {
+    if (this.config.authzAdminUrl && this.config.authzAdminToken) {
+      return this.remotePublish(serviceId, "/internal/scope-config/publish", config);
+    }
     const { publishScopeConfig } = await import("../lib");
     const response = await publishScopeConfig(config, this.runtime(serviceId));
     return this.result(response, serviceId);
@@ -71,9 +78,9 @@ export class R2ManagementPublisher implements ManagementPublisher {
 
   async invalidate(serviceId: string, scopeId?: string): Promise<void> {
     if (!this.config.authzAdminUrl || !this.config.authzAdminToken) return;
-    const response = await fetch(`${this.config.authzAdminUrl.replace(/\/$/, "")}/internal/cache/invalidate`, {
+    const response = await this.fetch(`${this.config.authzAdminUrl.replace(/\/$/, "")}/internal/cache/invalidate`, {
       method: "POST",
-      headers: { authorization: `Bearer ${this.config.authzAdminToken}`, "content-type": "application/json" },
+      headers: { "x-admin-token": this.config.authzAdminToken, "content-type": "application/json" },
       body: JSON.stringify(scopeId ? { scopeId } : { service: true }),
     });
     if (!response.ok) throw new Error(`cache invalidation failed with ${response.status}`);
@@ -108,5 +115,24 @@ export class R2ManagementPublisher implements ManagementPublisher {
       manifestKey: String(body.manifestKey),
       configKey: String(body.configKey),
     };
+  }
+
+  private async remotePublish(
+    serviceId: string,
+    path: string,
+    config: PublishServiceConfigRequest | PublishScopeConfigRequest,
+  ): Promise<PublishResult> {
+    const response = await this.fetch(`${this.config.authzAdminUrl!.replace(/\/$/, "")}${path}`, {
+      method: "POST",
+      headers: { "x-admin-token": this.config.authzAdminToken!, "content-type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    return this.result(response, serviceId);
+  }
+
+  private fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    return this.config.authzAdminFetcher
+      ? this.config.authzAdminFetcher.fetch(input, init)
+      : fetch(input, init);
   }
 }
