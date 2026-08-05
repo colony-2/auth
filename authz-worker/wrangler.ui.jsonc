@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "authz-management-ui",
+  "compatibility_date": "2026-04-05",
+  "assets": {
+    "directory": "./dist/management-ui",
+    "not_found_handling": "single-page-application",
+    "html_handling": "auto-trailing-slash"
+  }
+}
