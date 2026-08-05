@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../ui/src/App";
@@ -32,11 +32,14 @@ describe("management UI", () => {
       if (url.endsWith("/services")) return Response.json({ items: [{ serviceId: "projects-api", name: "Projects API", vocabulary, activeServiceVersion: "svc-1", createdAt: vocabulary.updatedAt, updatedAt: vocabulary.updatedAt }] });
       if (url.endsWith("/subjects")) return Response.json({ items: [{ subjectId: "user-alice", kind: "User", displayName: "Alice", status: "active", createdAt: vocabulary.updatedAt, updatedAt: vocabulary.updatedAt }] });
       if (url.includes("/scopes?")) return Response.json({ items: [{ scopeId: "project-alpha", serviceId: "projects-api", scopeType: "project", name: "Alpha", claimId: "pa", createdAt: vocabulary.updatedAt, updatedAt: vocabulary.updatedAt }] });
+      if (url.endsWith("/operations/status")) return Response.json({ pendingChangeRequests: 1, activeBreakGlassGrants: 0, dirtyProjections: 2, pendingProjectionEvents: 1, failedReplications: 0, recentReplications: [], checkedAt: vocabulary.updatedAt });
+      if (url.endsWith("/break-glass-grants")) return Response.json({ items: [] });
       return Response.json({ items: [] });
     }));
   });
 
   afterEach(() => {
+    cleanup();
     sessionStorage.clear();
     localStorage.clear();
     vi.unstubAllGlobals();
@@ -59,5 +62,14 @@ describe("management UI", () => {
     expect(screen.getByText("Authorization Console")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Access token" }));
     expect(screen.getByLabelText("Token")).toBeInTheDocument();
+  });
+
+  it("shows operational projection and approval status", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Projects API" });
+    fireEvent.click(screen.getByRole("button", { name: "Operations" }));
+    expect(await screen.findByRole("heading", { name: "Operations" })).toBeInTheDocument();
+    expect(screen.getByText("Dirty projections").parentElement).toHaveTextContent("2");
+    expect(screen.getByRole("heading", { name: "Break-glass grants" })).toBeInTheDocument();
   });
 });

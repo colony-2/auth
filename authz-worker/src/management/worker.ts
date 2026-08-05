@@ -6,6 +6,19 @@ import { R2ManagementPublisher } from "./publisher";
 import { D1ManagementRepository, type ScopeDraft, type ServiceDraft } from "./repository";
 import { ManagementError, ManagementService } from "./service";
 import { handleScimRequest, scimError } from "./scim";
+import {
+  createBreakGlassGrant,
+  createChangeRequest,
+  invalidateProjections,
+  listBreakGlassGrants,
+  listChangeRequests,
+  operationsStatus,
+  projectedClaims,
+  rebuildDirtyProjections,
+  recordReplication,
+  reviewBreakGlassGrant,
+  reviewChangeRequest,
+} from "./hardening";
 export { MANAGEMENT_ROUTES } from "./routes";
 
 export interface ManagementWorkerEnv {
@@ -17,6 +30,24 @@ export interface ManagementWorkerEnv {
   AUTHZ_ADMIN?: Fetcher;
   CORS_ORIGIN?: string;
   SCIM_BEARER_TOKEN?: string;
+  AUTHZ_REMOTE_PUBLISH?: string;
+  POLICY_REPLICA_BUCKET?: R2Bucket;
+  ENTITLEMENT_EVENTS?: Queue;
+  REQUIRE_PUBLISH_APPROVAL?: string;
+  BREAK_GLASS_MAX_SECONDS?: string;
+  AUTHZ_GATEWAY_TOKEN?: string;
+}
+
+function publisherFor(env: ManagementWorkerEnv): R2ManagementPublisher {
+  return new R2ManagementPublisher({
+    bucket: env.POLICY_BUCKET,
+    ...(env.AUTHZ_ADMIN_URL ? { authzAdminUrl: env.AUTHZ_ADMIN_URL } : {}),
+    ...(env.AUTHZ_ADMIN_TOKEN ? { authzAdminToken: env.AUTHZ_ADMIN_TOKEN } : {}),
+    ...(env.AUTHZ_ADMIN ? { authzAdminFetcher: env.AUTHZ_ADMIN } : {}),
+    publishRemotely: env.AUTHZ_REMOTE_PUBLISH === "true",
+    ...(env.POLICY_REPLICA_BUCKET ? { replicas: [{ name: "secondary", bucket: env.POLICY_REPLICA_BUCKET }] } : {}),
+    onReplication: (event) => recordReplication(env.CONTROL_DB, event),
+  });
 }
 
 function response(value: unknown, status = 200, origin = ""): Response {
@@ -29,6 +60,11 @@ function response(value: unknown, status = 200, origin = ""): Response {
   return Response.json(value, { status, headers });
 }
 
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function empty(status: number, origin = ""): Response {
   return new Response(null, { status, headers: origin ? { "access-control-allow-origin": origin } : {} });
 }
@@ -38,6 +74,12 @@ async function body<T>(request: Request): Promise<T> {
   if (size > 1024 * 1024) throw new ManagementError("invalid_request", "request body is too large", 413);
   try { return await request.json<T>(); }
   catch { throw new ManagementError("invalid_request", "request body must be valid JSON", 400); }
+}
+
+async function optionalBody<T>(request: Request, fallback: T): Promise<T> {
+  const text = await request.clone().text();
+  if (!text.trim()) return fallback;
+  return body<T>(request);
 }
 
 function match(path: string, pattern: string): Record<string, string> | undefined {
@@ -52,7 +94,9 @@ function match(path: string, pattern: string): Record<string, string> | undefine
 }
 
 function actor(request: Request, env: ManagementWorkerEnv): string {
-  const gatewayActor = request.headers.get("x-authz-decision") === "allow"
+  const trustedGateway = !!env.AUTHZ_GATEWAY_TOKEN &&
+    request.headers.get("x-authz-gateway-token") === env.AUTHZ_GATEWAY_TOKEN;
+  const gatewayActor = trustedGateway && request.headers.get("x-authz-decision") === "allow"
     ? request.headers.get("x-authz-principal-id")
     : undefined;
   if (gatewayActor) return gatewayActor;
@@ -99,12 +143,7 @@ async function idempotent(
 async function route(request: Request, env: ManagementWorkerEnv, actorId: string, origin: string): Promise<Response> {
   const url = new URL(request.url);
   const repository = new D1ManagementRepository(env.CONTROL_DB);
-  const publisher = new R2ManagementPublisher({
-    bucket: env.POLICY_BUCKET,
-    ...(env.AUTHZ_ADMIN_URL ? { authzAdminUrl: env.AUTHZ_ADMIN_URL } : {}),
-    ...(env.AUTHZ_ADMIN_TOKEN ? { authzAdminToken: env.AUTHZ_ADMIN_TOKEN } : {}),
-    ...(env.AUTHZ_ADMIN ? { authzAdminFetcher: env.AUTHZ_ADMIN } : {}),
-  });
+  const publisher = publisherFor(env);
   const service = new ManagementService(repository, publisher);
   const { pathname } = url;
 
@@ -135,17 +174,65 @@ async function route(request: Request, env: ManagementWorkerEnv, actorId: string
   if (values && request.method === "GET") return response({ items: await repository.listConfigVersions(values.serviceId!) }, 200, origin);
   values = match(pathname, "/services/{serviceId}/publish");
   if (values && request.method === "POST") {
-    const input = await body<{ version?: string }>(request);
+    if (env.REQUIRE_PUBLISH_APPROVAL === "true") {
+      throw new ManagementError("approval_required", "service publication requires an approved change request", 409);
+    }
+    const input = await optionalBody<{ version?: string }>(request, {});
     return response(await service.publishService(values.serviceId!, actorId, input.version), 201, origin);
   }
   values = match(pathname, "/services/{serviceId}/cache/invalidate");
   if (values && request.method === "POST") {
-    const input = await body<{ scopeId?: string }>(request);
+    const input = await optionalBody<{ scopeId?: string }>(request, {});
     await publisher.invalidate(values.serviceId!, input.scopeId);
     return response({ ok: true }, 200, origin);
   }
   values = match(pathname, "/services/{serviceId}/subjects/{subjectId}/claim-preview");
-  if (values && request.method === "GET") return response(await service.claimPreview(values.serviceId!, values.subjectId!), 200, origin);
+  if (values && request.method === "GET") {
+    return response(await projectedClaims(env.CONTROL_DB, repository, service, values.serviceId!, values.subjectId!), 200, origin);
+  }
+
+  if (pathname === "/change-requests" && request.method === "GET") {
+    return response({ items: await listChangeRequests(env.CONTROL_DB, url.searchParams.get("status") ?? undefined) }, 200, origin);
+  }
+  if (pathname === "/change-requests" && request.method === "POST") {
+    return response(await createChangeRequest(env.CONTROL_DB, repository, await body(request), actorId), 201, origin);
+  }
+  values = match(pathname, "/change-requests/{requestId}/approve");
+  if (values && request.method === "POST") {
+    const input = await optionalBody<{ note?: string }>(request, {});
+    return response(await reviewChangeRequest(env.CONTROL_DB, service, values.requestId!, "approve", actorId, input.note), 200, origin);
+  }
+  values = match(pathname, "/change-requests/{requestId}/reject");
+  if (values && request.method === "POST") {
+    const input = await optionalBody<{ note?: string }>(request, {});
+    return response(await reviewChangeRequest(env.CONTROL_DB, service, values.requestId!, "reject", actorId, input.note), 200, origin);
+  }
+
+  if (pathname === "/break-glass-grants" && request.method === "GET") {
+    return response({ items: await listBreakGlassGrants(env.CONTROL_DB, url.searchParams.get("status") ?? undefined) }, 200, origin);
+  }
+  if (pathname === "/break-glass-grants" && request.method === "POST") {
+    return response(await createBreakGlassGrant(
+      env.CONTROL_DB,
+      repository,
+      await body(request),
+      actorId,
+      parsePositiveInt(env.BREAK_GLASS_MAX_SECONDS, 3600),
+    ), 201, origin);
+  }
+  values = match(pathname, "/break-glass-grants/{grantId}/approve");
+  if (values && request.method === "POST") return response(await reviewBreakGlassGrant(env.CONTROL_DB, values.grantId!, "approve", actorId), 200, origin);
+  values = match(pathname, "/break-glass-grants/{grantId}/reject");
+  if (values && request.method === "POST") return response(await reviewBreakGlassGrant(env.CONTROL_DB, values.grantId!, "reject", actorId), 200, origin);
+  values = match(pathname, "/break-glass-grants/{grantId}/revoke");
+  if (values && request.method === "POST") return response(await reviewBreakGlassGrant(env.CONTROL_DB, values.grantId!, "revoke", actorId), 200, origin);
+
+  if (pathname === "/operations/status" && request.method === "GET") {
+    return response(await operationsStatus(env.CONTROL_DB), 200, origin);
+  }
+  if (pathname === "/operations/projections/rebuild" && request.method === "POST") {
+    return response(await rebuildDirtyProjections(env.CONTROL_DB, repository, service), 200, origin);
+  }
 
   if (pathname === "/subjects" && request.method === "GET") return response({ items: await repository.listSubjects() }, 200, origin);
   if (pathname === "/subjects" && request.method === "POST") {
@@ -212,7 +299,10 @@ async function route(request: Request, env: ManagementWorkerEnv, actorId: string
   if (values && request.method === "DELETE") { await service.deletePathGrant(values.scopeId!, values.pathGrantId!, actorId); return empty(204, origin); }
   values = match(pathname, "/scopes/{scopeId}/publish");
   if (values && request.method === "POST") {
-    const input = await body<{ version?: string }>(request);
+    if (env.REQUIRE_PUBLISH_APPROVAL === "true") {
+      throw new ManagementError("approval_required", "scope publication requires an approved change request", 409);
+    }
+    const input = await optionalBody<{ version?: string }>(request, {});
     return response(await service.publishScope(values.scopeId!, actorId, input.version), 201, origin);
   }
   if (pathname === "/simulations" && request.method === "POST") return response(await service.simulate(await body(request)), 200, origin);
@@ -235,21 +325,29 @@ export async function handleManagementRequest(request: Request, env: ManagementW
         throw new ManagementError("unauthorized", "SCIM bearer token is required", 401);
       }
       const repository = new D1ManagementRepository(env.CONTROL_DB);
-      const publisher = new R2ManagementPublisher({ bucket: env.POLICY_BUCKET });
-      return await handleScimRequest(
+      const publisher = publisherFor(env);
+      const result = await handleScimRequest(
         request,
         env.CONTROL_DB,
         repository,
         new ManagementService(repository, publisher),
         "scim-provisioner",
       );
+      if (!["GET", "HEAD"].includes(request.method) && result.status < 400) {
+        await recordManagementMutation(env, request);
+      }
+      return result;
     } catch (error) {
       return scimError(error);
     }
   }
   try {
     const actorId = actor(request, env);
-    return await idempotent(request, env, actorId, () => route(request, env, actorId, origin));
+    const result = await idempotent(request, env, actorId, () => route(request, env, actorId, origin));
+    if (!["GET", "HEAD"].includes(request.method) && result.status < 400) {
+      await recordManagementMutation(env, request);
+    }
+    return result;
   } catch (error) {
     if (error instanceof ManagementError) {
       return response({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } }, error.status, origin);
@@ -263,4 +361,18 @@ function bearerToken(request: Request): string | undefined {
   return request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
 }
 
-export default { fetch: handleManagementRequest } satisfies ExportedHandler<ManagementWorkerEnv>;
+async function recordManagementMutation(env: ManagementWorkerEnv, request: Request): Promise<void> {
+  const path = new URL(request.url).pathname;
+  if (path === "/simulations" || path.endsWith("/cache/invalidate") || path === "/operations/projections/rebuild") return;
+  await invalidateProjections(env.CONTROL_DB, path);
+  await env.ENTITLEMENT_EVENTS?.send({ reason: "management.mutation", path, at: new Date().toISOString() });
+}
+
+export default {
+  fetch: handleManagementRequest,
+  async scheduled(_controller: ScheduledController, env: ManagementWorkerEnv, ctx: ExecutionContext) {
+    const repository = new D1ManagementRepository(env.CONTROL_DB);
+    const service = new ManagementService(repository, publisherFor(env));
+    ctx.waitUntil(rebuildDirtyProjections(env.CONTROL_DB, repository, service, 100));
+  },
+} satisfies ExportedHandler<ManagementWorkerEnv>;

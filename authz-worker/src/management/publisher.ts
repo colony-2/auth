@@ -53,27 +53,41 @@ export interface R2PublisherConfig {
   authzAdminUrl?: string;
   authzAdminToken?: string;
   authzAdminFetcher?: Fetcher;
+  publishRemotely?: boolean;
+  replicas?: Array<{ name: string; bucket: R2Bucket }>;
+  onReplication?: (event: {
+    serviceId: string;
+    scopeId?: string;
+    version: string;
+    replica: string;
+    status: "succeeded" | "failed";
+    error?: string;
+  }) => Promise<void>;
 }
 
 export class R2ManagementPublisher implements ManagementPublisher {
   constructor(private readonly config: R2PublisherConfig) {}
 
   async publishService(serviceId: string, config: PublishServiceConfigRequest): Promise<PublishResult> {
-    if (this.config.authzAdminUrl && this.config.authzAdminToken) {
+    if (this.config.publishRemotely && this.config.authzAdminUrl && this.config.authzAdminToken) {
       return this.remotePublish(serviceId, "/internal/service-config/publish", config);
     }
     const { publishServiceConfig } = await import("../lib");
     const response = await publishServiceConfig(config, this.runtime(serviceId));
-    return this.result(response, serviceId);
+    const result = await this.result(response, serviceId);
+    await this.replicate(result);
+    return result;
   }
 
   async publishScope(serviceId: string, config: PublishScopeConfigRequest): Promise<PublishResult> {
-    if (this.config.authzAdminUrl && this.config.authzAdminToken) {
+    if (this.config.publishRemotely && this.config.authzAdminUrl && this.config.authzAdminToken) {
       return this.remotePublish(serviceId, "/internal/scope-config/publish", config);
     }
     const { publishScopeConfig } = await import("../lib");
     const response = await publishScopeConfig(config, this.runtime(serviceId));
-    return this.result(response, serviceId);
+    const result = await this.result(response, serviceId);
+    await this.replicate(result, config.scopeId);
+    return result;
   }
 
   async invalidate(serviceId: string, scopeId?: string): Promise<void> {
@@ -134,5 +148,33 @@ export class R2ManagementPublisher implements ManagementPublisher {
     return this.config.authzAdminFetcher
       ? this.config.authzAdminFetcher.fetch(input, init)
       : fetch(input, init);
+  }
+
+  private async replicate(result: PublishResult, scopeId?: string): Promise<void> {
+    for (const replica of this.config.replicas ?? []) {
+      try {
+        for (const key of [result.configKey, result.manifestKey]) {
+          const source = await this.config.bucket.get(key);
+          if (!source) throw new Error(`primary artifact ${key} is missing`);
+          await replica.bucket.put(key, await source.arrayBuffer(), { httpMetadata: source.httpMetadata });
+        }
+        await this.config.onReplication?.({
+          serviceId: result.serviceId,
+          ...(scopeId ? { scopeId } : {}),
+          version: result.version,
+          replica: replica.name,
+          status: "succeeded",
+        });
+      } catch (error) {
+        await this.config.onReplication?.({
+          serviceId: result.serviceId,
+          ...(scopeId ? { scopeId } : {}),
+          version: result.version,
+          replica: replica.name,
+          status: "failed",
+          error: error instanceof Error ? error.message : "replication failed",
+        });
+      }
+    }
   }
 }

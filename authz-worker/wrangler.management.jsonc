@@ -26,8 +26,10 @@
   ],
   "vars": {
     "CORS_ORIGIN": "http://127.0.0.1:5173",
-    "AUTHZ_ADMIN_URL": "http://127.0.0.1:8791"
+    "AUTHZ_ADMIN_URL": "http://127.0.0.1:8791",
+    "BREAK_GLASS_MAX_SECONDS": "3600"
   },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "env": {
     "staging": {
       "name": "authz-management-service-staging",
@@ -37,10 +39,15 @@
         "database_id": "replace-with-staging-d1-database-id",
         "migrations_dir": "migrations"
       }],
-      "r2_buckets": [{ "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-staging" }],
+      "r2_buckets": [
+        { "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-staging" },
+        { "binding": "POLICY_REPLICA_BUCKET", "bucket_name": "authz-policy-staging-replica" }
+      ],
       "vars": {
         "CORS_ORIGIN": "https://authz-management-ui-staging.example.workers.dev",
-        "AUTHZ_ADMIN_URL": "https://project-workspace-authz-gateway-staging.example.workers.dev"
+        "AUTHZ_ADMIN_URL": "https://project-workspace-authz-gateway-staging.example.workers.dev",
+        "BREAK_GLASS_MAX_SECONDS": "3600",
+        "REQUIRE_PUBLISH_APPROVAL": "true"
       }
     },
     "production": {
@@ -51,10 +58,15 @@
         "database_id": "replace-with-production-d1-database-id",
         "migrations_dir": "migrations"
       }],
-      "r2_buckets": [{ "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-production" }],
+      "r2_buckets": [
+        { "binding": "POLICY_BUCKET", "bucket_name": "authz-policy-production" },
+        { "binding": "POLICY_REPLICA_BUCKET", "bucket_name": "authz-policy-production-replica" }
+      ],
       "vars": {
         "CORS_ORIGIN": "https://authz-admin.example.com",
-        "AUTHZ_ADMIN_URL": "https://authz-gateway.example.com"
+        "AUTHZ_ADMIN_URL": "https://authz-gateway.example.com",
+        "BREAK_GLASS_MAX_SECONDS": "3600",
+        "REQUIRE_PUBLISH_APPROVAL": "true"
       }
     }
   }

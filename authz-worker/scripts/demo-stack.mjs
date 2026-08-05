@@ -31,6 +31,8 @@ async function prepareSecrets() {
     `MANAGEMENT_BOOTSTRAP_TOKEN=${DEMO_SECRETS.management}`,
     "AUTHZ_ADMIN_TOKEN=local-authz-admin-token",
     `AUTHZ_ADMIN_URL=${DEMO_URLS.gateway}`,
+    "AUTHZ_REMOTE_PUBLISH=true",
+    "AUTHZ_GATEWAY_TOKEN=local-management-gateway-token",
   ].join("\n") + "\n", { mode: 0o600 });
   await writeFile(".dev.vars.gateway", `ADMIN_TOKEN=local-authz-admin-token\n`, { mode: 0o600 });
 }

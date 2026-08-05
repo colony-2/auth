@@ -9,8 +9,10 @@ This runbook deploys the authentication Worker, management API, authorization ga
    ```bash
    npx wrangler d1 create authz-control-plane-staging
    npx wrangler r2 bucket create authz-policy-staging
+   npx wrangler r2 bucket create authz-policy-staging-replica
    npx wrangler d1 create authz-control-plane-production
    npx wrangler r2 bucket create authz-policy-production
+   npx wrangler r2 bucket create authz-policy-production-replica
    ```
 
 2. Replace the D1 IDs and example hostnames in `wrangler.authn.jsonc`, `wrangler.management.jsonc`, and `wrangler.demo-authz.jsonc`.
@@ -34,10 +36,13 @@ npx wrangler secret put OIDC_PROVIDERS_JSON --config wrangler.authn.jsonc --env 
 npx wrangler secret put MANAGEMENT_BOOTSTRAP_TOKEN --config wrangler.management.jsonc --env staging
 npx wrangler secret put AUTHZ_ADMIN_TOKEN --config wrangler.management.jsonc --env staging
 npx wrangler secret put SCIM_BEARER_TOKEN --config wrangler.management.jsonc --env staging
+npx wrangler secret put AUTHZ_GATEWAY_TOKEN --config wrangler.management.jsonc --env staging
 npx wrangler secret put ADMIN_TOKEN --config wrangler.demo-authz.jsonc --env staging
 ```
 
 Use a short-lived bootstrap token and replace direct bootstrap access with gateway-issued administrator identity before production use. `BOOTSTRAP_ENABLED` is intentionally absent from deployed authn environments.
+
+The management gateway must add `x-authz-gateway-token` after it authenticates and authorizes the caller. Never place `AUTHZ_GATEWAY_TOKEN` in the React UI environment or send it to a browser. See [Operational hardening](OPERATIONAL_HARDENING.md) for the full trust and approval model.
 
 ## Validate And Deploy
 
@@ -91,3 +96,5 @@ Omit `--scope` to roll back a service-global version. Run smoke tests immediatel
 - Keep staging and production D1 databases, R2 buckets, custom domains, signing keys, and credentials separate.
 - Export Worker logs and audit events without bearer tokens, refresh tokens, private keys, or provisioning secrets.
 - Alert on JWKS failures, management publish failures, repeated authentication failures, D1 errors, and elevated gateway `5xx` rates.
+- Alert on failed artifact replication, sustained dirty entitlement projections, pending change requests beyond the review SLA, and unexpected active break-glass grants.
+- Keep `REQUIRE_PUBLISH_APPROVAL=true` and configure `POLICY_REPLICA_BUCKET` in staging and production.

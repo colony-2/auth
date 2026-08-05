@@ -247,6 +247,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listChangeRequests"];
+        put?: never;
+        post: operations["createChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/change-requests/{requestId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approveChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/change-requests/{requestId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rejectChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/break-glass-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listBreakGlassGrants"];
+        put?: never;
+        post: operations["createBreakGlassGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/break-glass-grants/{grantId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approveBreakGlassGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/break-glass-grants/{grantId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rejectBreakGlassGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/break-glass-grants/{grantId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeBreakGlassGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOperationsStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/projections/rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rebuildEntitlementProjections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subjects": {
         parameters: {
             query?: never;
@@ -610,6 +764,78 @@ export interface components {
             status: string;
             detail: string;
         };
+        ReviewInput: {
+            note?: string;
+        };
+        ChangeRequestInput: {
+            /** @enum {string} */
+            targetType: "service" | "scope";
+            serviceId: components["schemas"]["Identifier"];
+            scopeId?: components["schemas"]["Identifier"];
+            requestedVersion?: string;
+            summary: string;
+        };
+        ChangeRequest: components["schemas"]["ChangeRequestInput"] & {
+            /** Format: uuid */
+            requestId: string;
+            requestedVersion: string;
+            diff: {
+                path: string;
+                before?: unknown;
+                after?: unknown;
+            }[];
+            impact: {
+                affectedSubjects: number;
+                changedAreas: string[];
+            };
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "executed" | "failed";
+            requestedBy: string;
+            reviewedBy?: string;
+            reviewNote?: string;
+            requestedAt: components["schemas"]["Timestamp"];
+            reviewedAt?: components["schemas"]["Timestamp"];
+            executedAt?: components["schemas"]["Timestamp"];
+        };
+        BreakGlassGrantInput: {
+            subjectId: components["schemas"]["Identifier"];
+            serviceId: components["schemas"]["Identifier"];
+            scopeId: components["schemas"]["Identifier"];
+            roleId: components["schemas"]["Identifier"];
+            reason: string;
+            durationSeconds: number;
+        };
+        BreakGlassGrant: components["schemas"]["BreakGlassGrantInput"] & {
+            /** Format: uuid */
+            grantId: string;
+            /** @enum {string} */
+            status: "pending" | "active" | "rejected" | "revoked" | "expired";
+            requestedBy: string;
+            approvedBy?: string;
+            requestedAt: components["schemas"]["Timestamp"];
+            approvedAt?: components["schemas"]["Timestamp"];
+            expiresAt: components["schemas"]["Timestamp"];
+            revokedAt?: components["schemas"]["Timestamp"];
+        };
+        ReplicationEvent: {
+            service_id: string;
+            scope_id?: string | null;
+            version: string;
+            replica: string;
+            /** @enum {string} */
+            status: "succeeded" | "failed";
+            error?: string | null;
+            created_at: components["schemas"]["Timestamp"];
+        };
+        OperationsStatus: {
+            pendingChangeRequests: number;
+            activeBreakGlassGrants: number;
+            dirtyProjections: number;
+            pendingProjectionEvents: number;
+            failedReplications: number;
+            recentReplications: components["schemas"]["ReplicationEvent"][];
+            checkedAt: components["schemas"]["Timestamp"];
+        };
         ScopeTypeDefinition: {
             id: components["schemas"]["Identifier"];
             name?: string;
@@ -864,6 +1090,8 @@ export interface components {
             /** @constant */
             azv: 1;
             azs: string[];
+            generatedAt?: components["schemas"]["Timestamp"];
+            cached?: boolean;
         };
         SimulationRequest: {
             serviceId: components["schemas"]["Identifier"];
@@ -895,7 +1123,7 @@ export interface components {
         ErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "invalid_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "version_conflict" | "idempotency_conflict" | "validation_failed" | "vocabulary_violation" | "config_incomplete" | "publish_conflict" | "publish_failed" | "internal_error";
+                code: "invalid_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "version_conflict" | "idempotency_conflict" | "validation_failed" | "vocabulary_violation" | "config_incomplete" | "publish_conflict" | "publish_failed" | "approval_required" | "internal_error";
                 message: string;
                 details?: unknown;
             };
@@ -1087,6 +1315,24 @@ export interface components {
                 "application/scim+json": components["schemas"]["ScimError"];
             };
         };
+        /** @description Reviewed configuration change */
+        ChangeRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ChangeRequest"];
+            };
+        };
+        /** @description Time-bounded emergency entitlement */
+        BreakGlassGrant: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["BreakGlassGrant"];
+            };
+        };
     };
     parameters: {
         ServiceId: components["schemas"]["Identifier"];
@@ -1096,6 +1342,8 @@ export interface components {
         GroupId: components["schemas"]["Identifier"];
         BindingId: components["schemas"]["Identifier"];
         PathGrantId: components["schemas"]["Identifier"];
+        RequestId: string;
+        GrantId: string;
         /** @description Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409. */
         IdempotencyKey: string;
         /** @description Expected vocabulary version, such as `"3"`. */
@@ -1596,6 +1844,233 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClaimPreview"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listChangeRequests: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected" | "executed" | "failed";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Change requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ChangeRequest"][];
+                    };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRequestInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ChangeRequest"];
+            default: components["responses"]["Error"];
+        };
+    };
+    approveChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ChangeRequest"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rejectChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                requestId: components["parameters"]["RequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ChangeRequest"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listBreakGlassGrants: {
+        parameters: {
+            query?: {
+                status?: "pending" | "active" | "rejected" | "revoked" | "expired";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Break-glass grants */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["BreakGlassGrant"][];
+                    };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createBreakGlassGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BreakGlassGrantInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["BreakGlassGrant"];
+            default: components["responses"]["Error"];
+        };
+    };
+    approveBreakGlassGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["BreakGlassGrant"];
+            default: components["responses"]["Error"];
+        };
+    };
+    rejectBreakGlassGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["BreakGlassGrant"];
+            default: components["responses"]["Error"];
+        };
+    };
+    revokeBreakGlassGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["BreakGlassGrant"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getOperationsStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projection, approval, emergency access, and replication status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsStatus"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    rebuildEntitlementProjections: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Replays the original successful JSON response for 24 hours. Reuse with a different request returns 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projection rebuild result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        rebuilt: number;
+                        failed: number;
+                    };
                 };
             };
             default: components["responses"]["Error"];

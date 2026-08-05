@@ -9,6 +9,19 @@ Build two companion services around the existing authorization Worker:
 
 The existing authz Worker should stay focused on request-time authorization. It verifies JWTs, resolves the current `Scope`, loads service-global and scope-local artifacts from R2, evaluates Cedar, and either allows, denies, or proxies the request. The new services should feed it trusted identity data and versioned authorization artifacts without moving policy evaluation into application services.
 
+## Implementation Status
+
+All three delivery phases are implemented in this repository:
+
+- The authentication Worker supports password and service-account login, refresh-token rotation, logout and session revocation, ES256/RS256 signing, JWKS, MFA, OIDC federation, and SAML integration through an OIDC-capable identity broker.
+- The management Worker provides the OpenAPI 3.1 control plane for vocabularies, identities, SCIM users and groups, scopes, groups, bindings, path grants, drafts, validation, publishing, audit, simulation, approval, and break-glass workflows.
+- Compact claims use cached entitlement projections invalidated by a durable D1 event outbox and rebuilt immediately on token preview or periodically by a scheduled Worker handler.
+- Direct R2 publishing writes immutable artifacts to the primary bucket, optionally replicates them to a second bucket, records replication outcomes, and invalidates the authorization gateway cache.
+- The React console covers daily administration and operational status. The seeded project-workspace application provides local and deployed end-to-end evaluation scenarios.
+- Local scripts, contract tests, UI tests, deployment dry runs, D1 migrations, staging/production Wrangler environments, smoke tests, and rollback tooling are included.
+
+The implemented contract is [openapi/management-service.openapi.yaml](openapi/management-service.openapi.yaml). Operating details are in [docs/OPERATIONAL_HARDENING.md](docs/OPERATIONAL_HARDENING.md) and [docs/CLOUDFLARE_DEPLOYMENT.md](docs/CLOUDFLARE_DEPLOYMENT.md).
+
 ## Goals
 
 - Provide a production control plane for the current authz runtime model.

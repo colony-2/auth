@@ -30,10 +30,18 @@ async function gateway(token, path, method = "GET", scope = "proj-alpha") {
   });
 }
 
-async function management(path, method = "GET", body) {
+async function management(path, method = "GET", body, actor) {
   const response = await fetch(`${DEMO_URLS.management}${path}`, {
     method,
-    headers: { authorization: `Bearer ${DEMO_SECRETS.management}`, ...(body ? { "content-type": "application/json" } : {}) },
+    headers: {
+      authorization: `Bearer ${DEMO_SECRETS.management}`,
+      ...(actor ? {
+        "x-authz-decision": "allow",
+        "x-authz-principal-id": actor,
+        "x-authz-gateway-token": "local-management-gateway-token",
+      } : {}),
+      ...(body ? { "content-type": "application/json" } : {}),
+    },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const text = await response.text();
@@ -86,6 +94,64 @@ export async function runDemoTests() {
     equal(value.response.status, 422, "status");
     equal(value.body.error.code, "vocabulary_violation", "error code");
   });
+  await check("forged gateway actor headers are rejected", async () => {
+    const response = await fetch(`${DEMO_URLS.management}/services`, {
+      headers: {
+        "x-authz-decision": "allow",
+        "x-authz-principal-id": "forged-admin",
+      },
+    });
+    equal(response.status, 401, "status");
+  });
+  await check("break-glass access requires a second actor and is revocable", async () => {
+    const created = await management("/break-glass-grants", "POST", {
+      subjectId: "user-alice", serviceId: "projects-api", scopeId: "proj-alpha",
+      roleId: "scope-admin", reason: "demo incident response", durationSeconds: 300,
+    }, "requester-admin");
+    equal(created.response.status, 201, "request status");
+    equal((await management(`/break-glass-grants/${created.body.grantId}/approve`, "POST", {}, "requester-admin")).response.status, 403, "self-approval status");
+    equal((await management(`/break-glass-grants/${created.body.grantId}/approve`, "POST", {}, "reviewer-admin")).response.status, 200, "approval status");
+    equal((await gateway(await mintDemoToken("alice"), "/projects/proj-alpha/bindings", "POST")).status, 200, "active grant");
+    equal((await management(`/break-glass-grants/${created.body.grantId}/revoke`, "POST", {}, "reviewer-admin")).response.status, 200, "revoke status");
+    equal((await gateway(await mintDemoToken("alice"), "/projects/proj-alpha/bindings", "POST")).status, 403, "revoked grant");
+  });
+  await check("publication approval rejects a stale reviewed diff", async () => {
+    const draft = await management("/scopes/proj-beta/config");
+    await management("/scopes/proj-beta/config", "PUT", {
+      ...draft.body,
+      metadata: { ...(draft.body.metadata ?? {}), staleReviewDemo: "reviewed" },
+    }, "requester-admin");
+    const created = await management("/change-requests", "POST", {
+      targetType: "scope", serviceId: "projects-api", scopeId: "proj-beta",
+      requestedVersion: `demo-stale-${Date.now()}`, summary: "Verify stale review rejection",
+    }, "requester-admin");
+    await management("/scopes/proj-beta/config", "PUT", {
+      ...draft.body,
+      metadata: { ...(draft.body.metadata ?? {}), staleReviewDemo: "changed-after-review" },
+    }, "requester-admin");
+    const stale = await management(`/change-requests/${created.body.requestId}/approve`, "POST", {}, "reviewer-admin");
+    equal(stale.response.status, 409, "stale approval status");
+    equal(stale.body.error.code, "change_request_stale", "stale approval code");
+    equal((await management(`/change-requests/${created.body.requestId}/reject`, "POST", {}, "reviewer-admin")).response.status, 200, "cleanup rejection");
+  });
+  await check("scope publication supports two-person approval with impact preview", async () => {
+    const draft = await management("/scopes/proj-beta/config");
+    await management("/scopes/proj-beta/config", "PUT", {
+      ...draft.body,
+      metadata: { ...(draft.body.metadata ?? {}), approvalDemo: Date.now() },
+    }, "requester-admin");
+    const created = await management("/change-requests", "POST", {
+      targetType: "scope", serviceId: "projects-api", scopeId: "proj-beta",
+      requestedVersion: `demo-approved-${Date.now()}`, summary: "Exercise two-person scope publication",
+    }, "requester-admin");
+    equal(created.response.status, 201, "request status");
+    equal(created.body.status, "pending", "pending status");
+    if (!created.body.diff.length) throw new Error("change request has no diff");
+    equal((await management(`/change-requests/${created.body.requestId}/approve`, "POST", {}, "requester-admin")).response.status, 403, "self-approval status");
+    const approved = await management(`/change-requests/${created.body.requestId}/approve`, "POST", { note: "demo review" }, "reviewer-admin");
+    equal(approved.response.status, 200, "approval status");
+    equal(approved.body.status, "executed", "executed status");
+  });
   await check("scope publication changes runtime behavior", async () => {
     const disabled = await management("/scopes/proj-alpha/config", "PUT", { includes: ["path.grants"], namedPaths: {}, staticEntities: [], metadata: {} });
     equal(disabled.response.status, 200, "update draft");
@@ -96,6 +162,12 @@ export async function runDemoTests() {
     await management("/scopes/proj-alpha/publish", "POST", { version: `demo-restored-${Date.now()}` });
     await new Promise((resolve) => setTimeout(resolve, 1_250));
     equal((await gateway(await mintDemoToken("alice"), "/projects/proj-alpha")).status, 200, "after restore");
+  });
+  await check("operations status reports projection and replication health", async () => {
+    const status = await management("/operations/status");
+    equal(status.response.status, 200, "status");
+    if (typeof status.body.dirtyProjections !== "number") throw new Error("dirty projection count is missing");
+    if (!Array.isArray(status.body.recentReplications)) throw new Error("replication status is missing");
   });
 
   const failures = results.filter((result) => result.status === "fail");

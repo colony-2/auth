@@ -15,8 +15,23 @@ The package supports:
 
 - proxy mode for protecting existing HTTP services
 - embedded mode for decorating an existing Worker handler
+- an authentication Worker with sessions, MFA, OIDC federation, service accounts, and JWKS
+- an OpenAPI-defined management API and React operations console
+- a runnable project-workspace demo and Cloudflare deployment workflow
 
 OpenAPI is still the source contract for actions and resources, but the runtime uses the compiled auth descriptor derived from that contract.
+
+## Companion Services
+
+The repository includes the control-plane services needed to operate the gateway:
+
+- [Authentication service](docs/AUTHENTICATION_SERVICE.md) issues asymmetric JWTs and compact authorization claims.
+- [Management service](docs/MANAGEMENT_SERVICE.md) owns service vocabularies, scopes, subjects, groups, bindings, policies, and immutable published artifacts.
+- [Management OpenAPI](openapi/management-service.openapi.yaml) is the canonical API contract used by the implementation, generated TypeScript types, contract tests, and React client.
+- [Management console](ui/) provides vocabulary, scope, identity, publishing, simulation, audit, approval, break-glass, and operational views.
+- [Project workspace demo](examples/project-workspace/) exercises the complete login-to-Cedar decision path.
+
+Run the complete local stack with `npm run demo:up`, or run its seeded end-to-end evaluation suite with `npm run demo:test`. See [Operational hardening](docs/OPERATIONAL_HARDENING.md) and the [Cloudflare deployment runbook](docs/CLOUDFLARE_DEPLOYMENT.md) for production controls.
 
 ## Core Model
 
@@ -348,10 +363,14 @@ That keeps the embedded library API typed and avoids JSON env blobs except where
 
 Commands from [package.json](/src/authz-worker/package.json):
 
-- `npm run dev`
+- `npm run demo:up`: start, migrate, seed, and print URLs for the full local system
+- `npm run demo:test`: run the seeded end-to-end behavior suite and stop the stack
+- `npm run dev:authn`, `npm run dev:management`, `npm run dev:authz`, `npm run dev:demo-api`: run individual Workers
+- `npm run dev:management-ui`: run the React console
+- `npm test`: run unit, contract, and UI tests
 - `npm run test:integration`
-- `npm run deploy:dry-run`
-- `npx tsc --noEmit`
+- `npm run deploy:cloudflare:dry-run -- --env staging`
+- `npm run typecheck && npm run typecheck:ui`
 
 The integration harness in [scripts/test-worker.mjs](/src/authz-worker/scripts/test-worker.mjs) covers:
 
@@ -377,18 +396,21 @@ The integration harness in [scripts/test-worker.mjs](/src/authz-worker/scripts/t
 
 ## Current Limits
 
-This is still a prototype:
+The implementation intentionally keeps these boundaries:
 
-- auth descriptor generation from OpenAPI is still external to this package
-- publishing/updating R2 artifacts is still external to the main authz worker
-- the public runtime surface assumes JWKS-backed verification
-- path grants are normalized at request time; there is no separate shared entitlement store yet
-- the principal/entity model is opinionated around `Scope`, `Principal`, and `PathObject`
+- Native SAML assertion parsing is not provided; SAML identity providers integrate through a trusted OIDC broker.
+- Access-token revocation is bounded by the short token lifetime. Session revocation and entitlement changes affect newly minted tokens.
+- Artifact replication records failures but does not automatically switch the gateway to a replica bucket.
+- D1 and R2 are the implemented persistence and distribution layers; multi-database active-active control-plane writes are out of scope.
+- The Cedar entity model is intentionally opinionated around `Scope`, `Principal`, and `PathObject`.
 
 ## Verification
 
 Latest local verification:
 
-- `npx tsc --noEmit`
+- `npm run typecheck`
+- `npm run typecheck:ui`
+- `npm test`
 - `npm run test:integration`
-- `npm run deploy:dry-run`
+- `npm run demo:test`
+- `npm run deploy:cloudflare:dry-run -- --env staging`

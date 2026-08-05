@@ -20,6 +20,8 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Siren,
+  Gauge,
   Trash2,
   Upload,
   Users,
@@ -40,7 +42,10 @@ type Binding = components["schemas"]["Binding"];
 type PathGrant = components["schemas"]["PathGrant"];
 type ConfigVersion = components["schemas"]["ConfigVersion"];
 type AuditEvent = components["schemas"]["AuditEvent"];
-type View = "overview" | "vocabulary" | "scopes" | "subjects" | "publishing" | "audit" | "simulator";
+type ChangeRequest = components["schemas"]["ChangeRequest"];
+type BreakGlassGrant = components["schemas"]["BreakGlassGrant"];
+type OperationsStatus = components["schemas"]["OperationsStatus"];
+type View = "overview" | "vocabulary" | "scopes" | "subjects" | "publishing" | "operations" | "audit" | "simulator";
 
 const config = loadConfig();
 
@@ -50,6 +55,7 @@ const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: "scopes", label: "Scopes & access", icon: Network },
   { id: "subjects", label: "Subjects", icon: Users },
   { id: "publishing", label: "Publishing", icon: Rocket },
+  { id: "operations", label: "Operations", icon: Gauge },
   { id: "audit", label: "Audit", icon: History },
   { id: "simulator", label: "Simulator", icon: FlaskConical },
 ];
@@ -220,6 +226,7 @@ export function App() {
         {view === "scopes" && <ScopesView {...context} />}
         {view === "subjects" && <SubjectsView {...context} />}
         {view === "publishing" && <PublishingView {...context} />}
+        {view === "operations" && <OperationsView {...context} />}
         {view === "audit" && <AuditView {...context} />}
         {view === "simulator" && <SimulatorView {...context} />}
       </>}
@@ -439,17 +446,155 @@ function SubjectModal({ client, onClose, onCreated }: { client: Context["client"
 }
 
 function PublishingView({ client, selectedService, scopes, readOnly, reload }: Context) {
-  const [serviceVersions, setServiceVersions] = useState<ConfigVersion[]>([]); const [scopeVersions, setScopeVersions] = useState<ConfigVersion[]>([]); const [scopeId, setScopeId] = useState(scopes[0]?.scopeId ?? ""); const [pending, setPending] = useState(false);
-  const loadVersions = useCallback(async () => { if (!selectedService) return; const servicePage = await result(client.GET("/services/{serviceId}/versions", { params: { path: { serviceId: selectedService.serviceId } } })); setServiceVersions(servicePage.items); if (scopeId) { const scopePage = await result(client.GET("/scopes/{scopeId}/versions", { params: { path: { scopeId } } })); setScopeVersions(scopePage.items); } }, [client, scopeId, selectedService]);
+  const [serviceVersions, setServiceVersions] = useState<ConfigVersion[]>([]);
+  const [scopeVersions, setScopeVersions] = useState<ConfigVersion[]>([]);
+  const [changes, setChanges] = useState<ChangeRequest[]>([]);
+  const [scopeId, setScopeId] = useState(scopes[0]?.scopeId ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const loadVersions = useCallback(async () => {
+    if (!selectedService) return;
+    const [servicePage, changePage] = await Promise.all([
+      result(client.GET("/services/{serviceId}/versions", { params: { path: { serviceId: selectedService.serviceId } } })),
+      result(client.GET("/change-requests")),
+    ]);
+    setServiceVersions(servicePage.items);
+    setChanges(changePage.items.filter((change) => change.serviceId === selectedService.serviceId));
+    if (scopeId) {
+      const scopePage = await result(client.GET("/scopes/{scopeId}/versions", { params: { path: { scopeId } } }));
+      setScopeVersions(scopePage.items);
+    }
+  }, [client, scopeId, selectedService]);
   useEffect(() => { void loadVersions(); }, [loadVersions]);
-  async function publishService() { if (!selectedService) return; setPending(true); try { await result(client.POST("/services/{serviceId}/publish", { params: { path: { serviceId: selectedService.serviceId } }, body: {} })); await loadVersions(); await reload(); } finally { setPending(false); } }
-  async function publishScope() { if (!scopeId) return; setPending(true); try { await result(client.POST("/scopes/{scopeId}/publish", { params: { path: { scopeId } }, body: {} })); await loadVersions(); await reload(); } finally { setPending(false); } }
-  return <><PageHeader title="Publishing" detail="Immutable runtime artifact versions" />
-    <section className="publish-band"><div><h2>Service configuration</h2><span>{selectedService?.activeServiceVersion ?? "Not published"}</span></div><button className="primary" disabled={readOnly || pending || !selectedService} onClick={() => void publishService()}><Rocket />Publish service</button></section>
+  async function requestReview(targetType: "service" | "scope") {
+    if (!selectedService || (targetType === "scope" && !scopeId)) return;
+    setPending(true); setError("");
+    try {
+      await result(client.POST("/change-requests", { body: {
+        targetType,
+        serviceId: selectedService.serviceId,
+        ...(targetType === "scope" ? { scopeId } : {}),
+        summary: `Publish ${targetType} configuration from the current draft`,
+      } }));
+      await loadVersions();
+    } catch (value) { setError(value instanceof Error ? value.message : "Unable to request review"); }
+    finally { setPending(false); }
+  }
+  async function review(requestId: string, decision: "approve" | "reject") {
+    setPending(true); setError("");
+    try {
+      await result(decision === "approve"
+        ? client.POST("/change-requests/{requestId}/approve", { params: { path: { requestId } }, body: {} })
+        : client.POST("/change-requests/{requestId}/reject", { params: { path: { requestId } }, body: {} }));
+      await loadVersions(); await reload();
+    } catch (value) { setError(value instanceof Error ? value.message : "Unable to review change"); }
+    finally { setPending(false); }
+  }
+  return <><PageHeader title="Publishing" detail="Reviewed immutable runtime artifact versions" />
+    {error && <div className="inline-error"><CircleAlert />{error}</div>}
+    <section className="content-section"><div className="section-title"><h2>Review queue</h2></div>
+      <DataTable headers={["Target", "Status", "Impact", "Requested by", ""]} rows={changes.map((change) => [
+        change.scopeId ?? change.serviceId,
+        <Status value={change.status} />,
+        `${change.impact.affectedSubjects} subjects · ${change.impact.changedAreas.join(", ")}`,
+        change.requestedBy,
+        change.status === "pending" ? <span className="row-actions">
+          <IconButton label="Approve" disabled={readOnly || pending} onClick={() => void review(change.requestId, "approve")}><Check /></IconButton>
+          <IconButton label="Reject" danger disabled={readOnly || pending} onClick={() => void review(change.requestId, "reject")}><X /></IconButton>
+        </span> : "",
+      ])} />
+    </section>
+    <section className="publish-band"><div><h2>Service configuration</h2><span>{selectedService?.activeServiceVersion ?? "Not published"}</span></div><button className="primary" disabled={readOnly || pending || !selectedService} onClick={() => void requestReview("service")}><Rocket />Request service review</button></section>
     <DataTable headers={["Version", "Status", "Published", "Artifact"]} rows={serviceVersions.map((value) => [value.versionId, <Status value={value.status} />, value.publishedAt ? new Date(value.publishedAt).toLocaleString() : "-", <code>{value.artifactKey}</code>])} />
-    <section className="publish-band"><div><h2>Scope configuration</h2><select value={scopeId} onChange={(event) => setScopeId(event.target.value)}>{scopes.map((scope) => <option key={scope.scopeId} value={scope.scopeId}>{scope.name}</option>)}</select></div><button className="primary" disabled={readOnly || pending || !scopeId} onClick={() => void publishScope()}><Rocket />Publish scope</button></section>
+    <section className="publish-band"><div><h2>Scope configuration</h2><select value={scopeId} onChange={(event) => setScopeId(event.target.value)}>{scopes.map((scope) => <option key={scope.scopeId} value={scope.scopeId}>{scope.name}</option>)}</select></div><button className="primary" disabled={readOnly || pending || !scopeId} onClick={() => void requestReview("scope")}><Rocket />Request scope review</button></section>
     <DataTable headers={["Version", "Status", "Published", "Artifact"]} rows={scopeVersions.map((value) => [value.versionId, <Status value={value.status} />, value.publishedAt ? new Date(value.publishedAt).toLocaleString() : "-", <code>{value.artifactKey}</code>])} />
   </>;
+}
+
+function OperationsView(context: Context) {
+  const { client, serviceId, selectedService, scopes, subjects, readOnly } = context;
+  const [status, setStatus] = useState<OperationsStatus>();
+  const [grants, setGrants] = useState<BreakGlassGrant[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    const [nextStatus, page] = await Promise.all([
+      result(client.GET("/operations/status")),
+      result(client.GET("/break-glass-grants")),
+    ]);
+    setStatus(nextStatus);
+    setGrants(page.items.filter((grant) => grant.serviceId === serviceId));
+  }, [client, serviceId]);
+  useEffect(() => { void load(); }, [load]);
+  async function act(grantId: string, action: "approve" | "reject" | "revoke") {
+    setPending(true); setError("");
+    try {
+      if (action === "approve") await result(client.POST("/break-glass-grants/{grantId}/approve", { params: { path: { grantId } } }));
+      else if (action === "reject") await result(client.POST("/break-glass-grants/{grantId}/reject", { params: { path: { grantId } } }));
+      else await result(client.POST("/break-glass-grants/{grantId}/revoke", { params: { path: { grantId } } }));
+      await load();
+    } catch (value) { setError(value instanceof Error ? value.message : "Operation failed"); }
+    finally { setPending(false); }
+  }
+  async function rebuild() {
+    setPending(true); setError("");
+    try { await result(client.POST("/operations/projections/rebuild")); await load(); }
+    catch (value) { setError(value instanceof Error ? value.message : "Projection rebuild failed"); }
+    finally { setPending(false); }
+  }
+  return <><PageHeader title="Operations" detail="Emergency access, projections, and artifact distribution" actions={<>
+    <button disabled={pending || readOnly} onClick={() => void rebuild()}><RefreshCw />Rebuild projections</button>
+    <button className="primary" disabled={readOnly || !selectedService} onClick={() => setCreating(true)}><Siren />Request break-glass</button>
+  </>} />
+    {error && <div className="inline-error"><CircleAlert />{error}</div>}
+    {status && <div className="metric-strip">
+      <div><span>Pending reviews</span><strong>{status.pendingChangeRequests}</strong></div>
+      <div><span>Active emergency grants</span><strong>{status.activeBreakGlassGrants}</strong></div>
+      <div><span>Dirty projections</span><strong>{status.dirtyProjections}</strong></div>
+      <div><span>Replication failures</span><strong>{status.failedReplications}</strong></div>
+    </div>}
+    <section className="content-section"><div className="section-title"><h2>Break-glass grants</h2></div>
+      <DataTable headers={["Subject", "Scope", "Role", "Status", "Expires", ""]} rows={grants.map((grant) => [
+        grant.subjectId, grant.scopeId, grant.roleId, <Status value={grant.status} />,
+        new Date(grant.expiresAt).toLocaleString(),
+        grant.status === "pending" ? <span className="row-actions"><IconButton label="Approve" disabled={pending || readOnly} onClick={() => void act(grant.grantId, "approve")}><Check /></IconButton><IconButton label="Reject" danger disabled={pending || readOnly} onClick={() => void act(grant.grantId, "reject")}><X /></IconButton></span>
+          : grant.status === "active" ? <IconButton label="Revoke" danger disabled={pending || readOnly} onClick={() => void act(grant.grantId, "revoke")}><Trash2 /></IconButton> : "",
+      ])} />
+    </section>
+    <section className="content-section"><div className="section-title"><h2>Recent replication</h2></div>
+      <DataTable headers={["Service", "Scope", "Version", "Replica", "Status"]} rows={(status?.recentReplications ?? []).map((event) => [event.service_id, event.scope_id ?? "-", event.version, event.replica, <Status value={event.status} />])} />
+    </section>
+    {creating && selectedService && <BreakGlassModal client={client} serviceId={serviceId} scopes={scopes} subjects={subjects} roles={selectedService.vocabulary.roleTemplates.map((role) => role.id)} onClose={() => setCreating(false)} onCreated={async () => { setCreating(false); await load(); }} />}
+  </>;
+}
+
+function BreakGlassModal({ client, serviceId, scopes, subjects, roles, onClose, onCreated }: {
+  client: Context["client"]; serviceId: string; scopes: Scope[]; subjects: Subject[]; roles: string[];
+  onClose: () => void; onCreated: () => void;
+}) {
+  const [subjectId, setSubjectId] = useState(subjects[0]?.subjectId ?? "");
+  const [scopeId, setScopeId] = useState(scopes[0]?.scopeId ?? "");
+  const [roleId, setRoleId] = useState(roles[0] ?? "");
+  const [reason, setReason] = useState("");
+  const [durationSeconds, setDurationSeconds] = useState(900);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await result(client.POST("/break-glass-grants", { body: { subjectId, serviceId, scopeId, roleId, reason, durationSeconds } }));
+      onCreated();
+    } catch (value) { setError(value instanceof Error ? value.message : "Unable to request emergency access"); }
+  }
+  return <Modal title="Request break-glass access" onClose={onClose}><form className="form-grid" onSubmit={submit}>
+    <label>Subject<select value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>{subjects.map((subject) => <option key={subject.subjectId} value={subject.subjectId}>{subject.displayName}</option>)}</select></label>
+    <label>Scope<select value={scopeId} onChange={(event) => setScopeId(event.target.value)}>{scopes.map((scope) => <option key={scope.scopeId} value={scope.scopeId}>{scope.name}</option>)}</select></label>
+    <label>Role<select value={roleId} onChange={(event) => setRoleId(event.target.value)}>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>
+    <label>Duration (seconds)<input type="number" min={60} max={3600} value={durationSeconds} onChange={(event) => setDurationSeconds(Number(event.target.value))} /></label>
+    <label>Incident reason<textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} required /></label>
+    {error && <div className="inline-error"><CircleAlert />{error}</div>}
+    <div className="form-actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary"><Siren />Request</button></div>
+  </form></Modal>;
 }
 
 function AuditView({ client, serviceId }: Context) {

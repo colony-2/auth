@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Authorization Management Service API
-  version: 1.1.0
+  version: 1.2.0
   description: Versioned control-plane API for service vocabularies, subjects, scopes, entitlements, policy artifacts, and audit history.
 servers:
   - url: http://127.0.0.1:8789
@@ -17,6 +17,8 @@ tags:
   - name: Publishing
   - name: Audit
   - name: Provisioning
+  - name: Approvals
+  - name: Operations
 paths:
   /health:
     get:
@@ -279,6 +281,99 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ClaimPreview' }
+        default: { $ref: '#/components/responses/Error' }
+  /change-requests:
+    get:
+      operationId: listChangeRequests
+      tags: [Approvals]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected, executed, failed] } }
+      responses:
+        '200':
+          description: Change requests
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ChangeRequest' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createChangeRequest
+      tags: [Approvals]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequestInput' } } }
+      responses:
+        '201': { $ref: '#/components/responses/ChangeRequest' }
+        default: { $ref: '#/components/responses/Error' }
+  /change-requests/{requestId}/approve:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      operationId: approveChangeRequest
+      tags: [Approvals]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ReviewInput' } } } }
+      responses: { '200': { $ref: '#/components/responses/ChangeRequest' }, default: { $ref: '#/components/responses/Error' } }
+  /change-requests/{requestId}/reject:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      operationId: rejectChangeRequest
+      tags: [Approvals]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ReviewInput' } } } }
+      responses: { '200': { $ref: '#/components/responses/ChangeRequest' }, default: { $ref: '#/components/responses/Error' } }
+  /break-glass-grants:
+    get:
+      operationId: listBreakGlassGrants
+      tags: [Operations]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, revoked, expired] } }
+      responses:
+        '200':
+          description: Break-glass grants
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/BreakGlassGrant' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createBreakGlassGrant
+      tags: [Operations]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BreakGlassGrantInput' } } }
+      responses: { '201': { $ref: '#/components/responses/BreakGlassGrant' }, default: { $ref: '#/components/responses/Error' } }
+  /break-glass-grants/{grantId}/approve:
+    parameters: [{ $ref: '#/components/parameters/GrantId' }]
+    post:
+      operationId: approveBreakGlassGrant
+      tags: [Operations]
+      responses: { '200': { $ref: '#/components/responses/BreakGlassGrant' }, default: { $ref: '#/components/responses/Error' } }
+  /break-glass-grants/{grantId}/reject:
+    parameters: [{ $ref: '#/components/parameters/GrantId' }]
+    post:
+      operationId: rejectBreakGlassGrant
+      tags: [Operations]
+      responses: { '200': { $ref: '#/components/responses/BreakGlassGrant' }, default: { $ref: '#/components/responses/Error' } }
+  /break-glass-grants/{grantId}/revoke:
+    parameters: [{ $ref: '#/components/parameters/GrantId' }]
+    post:
+      operationId: revokeBreakGlassGrant
+      tags: [Operations]
+      responses: { '200': { $ref: '#/components/responses/BreakGlassGrant' }, default: { $ref: '#/components/responses/Error' } }
+  /operations/status:
+    get:
+      operationId: getOperationsStatus
+      tags: [Operations]
+      responses:
+        '200':
+          description: Projection, approval, emergency access, and replication status
+          content: { application/json: { schema: { $ref: '#/components/schemas/OperationsStatus' } } }
+        default: { $ref: '#/components/responses/Error' }
+  /operations/projections/rebuild:
+    post:
+      operationId: rebuildEntitlementProjections
+      tags: [Operations]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200':
+          description: Projection rebuild result
+          content: { application/json: { schema: { type: object, required: [rebuilt, failed], properties: { rebuilt: { type: integer }, failed: { type: integer } } } } }
         default: { $ref: '#/components/responses/Error' }
   /subjects:
     get:
@@ -599,6 +694,8 @@ components:
     GroupId: { name: groupId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
     BindingId: { name: bindingId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
     PathGrantId: { name: pathGrantId, in: path, required: true, schema: { $ref: '#/components/schemas/Identifier' } }
+    RequestId: { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+    GrantId: { name: grantId, in: path, required: true, schema: { type: string, format: uuid } }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -667,6 +764,12 @@ components:
     ScimError:
       description: SCIM error response
       content: { application/scim+json: { schema: { $ref: '#/components/schemas/ScimError' } } }
+    ChangeRequest:
+      description: Reviewed configuration change
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } }
+    BreakGlassGrant:
+      description: Time-bounded emergency entitlement
+      content: { application/json: { schema: { $ref: '#/components/schemas/BreakGlassGrant' } } }
   schemas:
     Identifier: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,127}$' }
     Timestamp: { type: string, format: date-time }
@@ -748,6 +851,91 @@ components:
         schemas: { type: array, items: { const: 'urn:ietf:params:scim:api:messages:2.0:Error' } }
         status: { type: string }
         detail: { type: string }
+    ReviewInput:
+      type: object
+      properties: { note: { type: string, maxLength: 2000 } }
+    ChangeRequestInput:
+      type: object
+      required: [targetType, serviceId, summary]
+      properties:
+        targetType: { type: string, enum: [service, scope] }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        requestedVersion: { type: string, pattern: '^[A-Za-z0-9_.:-]+$' }
+        summary: { type: string, minLength: 1, maxLength: 2000 }
+    ChangeRequest:
+      allOf:
+        - { $ref: '#/components/schemas/ChangeRequestInput' }
+        - type: object
+          required: [requestId, requestedVersion, diff, impact, status, requestedBy, requestedAt]
+          properties:
+            requestId: { type: string, format: uuid }
+            requestedVersion: { type: string }
+            diff:
+              type: array
+              items:
+                type: object
+                required: [path]
+                properties: { path: { type: string }, before: {}, after: {} }
+            impact:
+              type: object
+              required: [affectedSubjects, changedAreas]
+              properties:
+                affectedSubjects: { type: integer, minimum: 0 }
+                changedAreas: { type: array, items: { type: string } }
+            status: { type: string, enum: [pending, approved, rejected, executed, failed] }
+            requestedBy: { type: string }
+            reviewedBy: { type: string }
+            reviewNote: { type: string }
+            requestedAt: { $ref: '#/components/schemas/Timestamp' }
+            reviewedAt: { $ref: '#/components/schemas/Timestamp' }
+            executedAt: { $ref: '#/components/schemas/Timestamp' }
+    BreakGlassGrantInput:
+      type: object
+      required: [subjectId, serviceId, scopeId, roleId, reason, durationSeconds]
+      properties:
+        subjectId: { $ref: '#/components/schemas/Identifier' }
+        serviceId: { $ref: '#/components/schemas/Identifier' }
+        scopeId: { $ref: '#/components/schemas/Identifier' }
+        roleId: { $ref: '#/components/schemas/Identifier' }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        durationSeconds: { type: integer, minimum: 60, maximum: 3600 }
+    BreakGlassGrant:
+      allOf:
+        - { $ref: '#/components/schemas/BreakGlassGrantInput' }
+        - type: object
+          required: [grantId, status, requestedBy, requestedAt, expiresAt]
+          properties:
+            grantId: { type: string, format: uuid }
+            status: { type: string, enum: [pending, active, rejected, revoked, expired] }
+            requestedBy: { type: string }
+            approvedBy: { type: string }
+            requestedAt: { $ref: '#/components/schemas/Timestamp' }
+            approvedAt: { $ref: '#/components/schemas/Timestamp' }
+            expiresAt: { $ref: '#/components/schemas/Timestamp' }
+            revokedAt: { $ref: '#/components/schemas/Timestamp' }
+    ReplicationEvent:
+      type: object
+      required: [service_id, version, replica, status, created_at]
+      properties:
+        service_id: { type: string }
+        scope_id: { type: [string, 'null'] }
+        version: { type: string }
+        replica: { type: string }
+        status: { type: string, enum: [succeeded, failed] }
+        error: { type: [string, 'null'] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    OperationsStatus:
+      type: object
+      required: [pendingChangeRequests, activeBreakGlassGrants, dirtyProjections, pendingProjectionEvents, failedReplications, recentReplications, checkedAt]
+      properties:
+        pendingChangeRequests: { type: integer, minimum: 0 }
+        activeBreakGlassGrants: { type: integer, minimum: 0 }
+        dirtyProjections: { type: integer, minimum: 0 }
+        pendingProjectionEvents: { type: integer, minimum: 0 }
+        failedReplications: { type: integer, minimum: 0 }
+        recentReplications: { type: array, items: { $ref: '#/components/schemas/ReplicationEvent' } }
+        checkedAt: { $ref: '#/components/schemas/Timestamp' }
     ScopeTypeDefinition:
       type: object
       required: [id]
@@ -1034,6 +1222,8 @@ components:
         serviceId: { $ref: '#/components/schemas/Identifier' }
         azv: { const: 1 }
         azs: { type: array, items: { type: string } }
+        generatedAt: { $ref: '#/components/schemas/Timestamp' }
+        cached: { type: boolean }
     SimulationRequest:
       type: object
       required: [serviceId, scopeId, subjectId, actionId]
@@ -1073,7 +1263,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, version_conflict, idempotency_conflict, validation_failed, vocabulary_violation, config_incomplete, publish_conflict, publish_failed, internal_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, version_conflict, idempotency_conflict, validation_failed, vocabulary_violation, config_incomplete, publish_conflict, publish_failed, approval_required, internal_error]
             message: { type: string }
             details: {}
     Timestamps:

@@ -68,9 +68,9 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospac
 .hierarchy-line span { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 650; }
 .hierarchy-line svg { width: 15px; color: #9ba59f; }
 .status { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 4px; font-size: 11px; font-weight: 750; text-transform: uppercase; }
-.status-active, .status-published { color: #09634c; background: var(--teal-soft); }
+.status-active, .status-published, .status-executed, .status-succeeded, .status-approved { color: #09634c; background: var(--teal-soft); }
 .status-suspended, .status-pending, .status-draft { color: var(--amber); background: var(--amber-soft); }
-.status-disabled, .status-rejected { color: var(--danger); background: var(--danger-soft); }
+.status-disabled, .status-rejected, .status-revoked, .status-expired, .status-failed { color: var(--danger); background: var(--danger-soft); }
 .concept-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .concept-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .concept-panel header { display: flex; align-items: center; gap: 9px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
