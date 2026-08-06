@@ -64,16 +64,23 @@ function bearer(request: Request): string | undefined {
   return match?.[1];
 }
 
+function applyCors(headers: Headers, origin: string): Headers {
+  if (!origin) return headers;
+  headers.set("access-control-allow-origin", origin);
+  headers.set("access-control-allow-headers", "authorization, content-type");
+  headers.set("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
+  return headers;
+}
+
 function json(value: unknown, init: ResponseInit = {}, origin = ""): Response {
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", "no-store");
-  if (origin) {
-    headers.set("access-control-allow-origin", origin);
-    headers.set("access-control-allow-headers", "authorization, content-type");
-    headers.set("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
-  }
-  return Response.json(value, { ...init, headers });
+  return Response.json(value, { ...init, headers: applyCors(headers, origin) });
+}
+
+function empty(status: number, origin = ""): Response {
+  return new Response(null, { status, headers: applyCors(new Headers(), origin) });
 }
 
 async function metadata(request: Request, env: AuthnWorkerEnv): Promise<RequestMetadata> {
@@ -94,7 +101,7 @@ async function authenticatedSubject(request: Request, service: AuthenticationSer
 
 export async function handleAuthnRequest(request: Request, env: AuthnWorkerEnv): Promise<Response> {
   const origin = env.CORS_ORIGIN ?? "";
-  if (request.method === "OPTIONS") return json({}, { status: 204 }, origin);
+  if (request.method === "OPTIONS") return empty(204, origin);
   const url = new URL(request.url);
   let repository: AuthnRepository = new D1AuthnRepository(env.CONTROL_DB);
   if (env.MANAGEMENT_API_URL && env.MANAGEMENT_API_TOKEN) {
@@ -141,7 +148,7 @@ export async function handleAuthnRequest(request: Request, env: AuthnWorkerEnv):
       const body = await jsonBody<{ refreshToken?: string }>(request);
       if (!body.refreshToken) throw new AuthnError("invalid_request", "refreshToken is required");
       await service.logout(body.refreshToken);
-      return new Response(null, { status: 204, headers: origin ? { "access-control-allow-origin": origin } : {} });
+      return empty(204, origin);
     }
     if (request.method === "POST" && url.pathname === "/auth/introspect") {
       if (request.headers.get("x-internal-auth-token") !== env.INTERNAL_AUTH_TOKEN) {
@@ -197,7 +204,7 @@ export async function handleAuthnRequest(request: Request, env: AuthnWorkerEnv):
       const subjectId = await authenticatedSubject(request, service);
       const revoked = await service.revokeSession(subjectId, decodeURIComponent(sessionMatch[1]!));
       if (!revoked) throw new AuthnError("not_found", "session not found", 404);
-      return new Response(null, { status: 204, headers: origin ? { "access-control-allow-origin": origin } : {} });
+      return empty(204, origin);
     }
     if (request.method === "POST" && url.pathname === "/auth/mfa/enroll") {
       return json(await service.beginMfaEnrollment(await authenticatedSubject(request, service)), {}, origin);

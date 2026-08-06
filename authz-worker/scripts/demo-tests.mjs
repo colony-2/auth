@@ -48,12 +48,42 @@ async function management(path, method = "GET", body, actor) {
   return { response, body: text ? JSON.parse(text) : undefined };
 }
 
+async function browserPreflight(url, method, requestedHeaders) {
+  return fetch(url, {
+    method: "OPTIONS",
+    headers: {
+      origin: DEMO_URLS.ui,
+      "access-control-request-method": method,
+      "access-control-request-headers": requestedHeaders.join(","),
+    },
+  });
+}
+
+function includesHeader(response, name, expected) {
+  const values = (response.headers.get(name) ?? "").toLowerCase().split(/,\s*/);
+  if (!values.includes(expected.toLowerCase())) throw new Error(`${name} does not include ${expected}`);
+}
+
 export async function runDemoTests() {
   const alice = await mintDemoToken("alice");
   const carol = await mintDemoToken("carol");
   const admin = await mintDemoToken("admin");
   const automation = await mintDemoToken("automation");
 
+  await check("management accepts browser authorization preflight", async () => {
+    const response = await browserPreflight(`${DEMO_URLS.management}/services`, "GET", ["authorization"]);
+    equal(response.status, 204, "status");
+    equal(response.headers.get("access-control-allow-origin"), DEMO_URLS.ui, "allowed origin");
+    includesHeader(response, "access-control-allow-headers", "authorization");
+    includesHeader(response, "access-control-allow-methods", "GET");
+  });
+  await check("authentication accepts browser login preflight", async () => {
+    const response = await browserPreflight(`${DEMO_URLS.authn}/auth/login`, "POST", ["content-type"]);
+    equal(response.status, 204, "status");
+    equal(response.headers.get("access-control-allow-origin"), DEMO_URLS.ui, "allowed origin");
+    includesHeader(response, "access-control-allow-headers", "content-type");
+    includesHeader(response, "access-control-allow-methods", "POST");
+  });
   await check("viewer reads a project", async () => equal((await gateway(alice, "/projects/proj-alpha")).status, 200, "status"));
   await check("viewer cannot update a project", async () => equal((await gateway(alice, "/projects/proj-alpha", "PUT")).status, 403, "status"));
   await check("project manager updates a project", async () => equal((await gateway(carol, "/projects/proj-alpha", "PUT")).status, 200, "status"));

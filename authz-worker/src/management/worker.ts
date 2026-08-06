@@ -50,14 +50,17 @@ function publisherFor(env: ManagementWorkerEnv): R2ManagementPublisher {
   });
 }
 
+function applyCors(headers: Headers, origin: string): Headers {
+  if (!origin) return headers;
+  headers.set("access-control-allow-origin", origin);
+  headers.set("access-control-allow-headers", "authorization, content-type, idempotency-key, if-match");
+  headers.set("access-control-allow-methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  return headers;
+}
+
 function response(value: unknown, status = 200, origin = ""): Response {
   const headers = new Headers({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  if (origin) {
-    headers.set("access-control-allow-origin", origin);
-    headers.set("access-control-allow-headers", "authorization, content-type, idempotency-key, if-match");
-    headers.set("access-control-allow-methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  }
-  return Response.json(value, { status, headers });
+  return Response.json(value, { status, headers: applyCors(headers, origin) });
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -66,7 +69,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 function empty(status: number, origin = ""): Response {
-  return new Response(null, { status, headers: origin ? { "access-control-allow-origin": origin } : {} });
+  return new Response(null, { status, headers: applyCors(new Headers(), origin) });
 }
 
 async function body<T>(request: Request): Promise<T> {
@@ -316,7 +319,10 @@ export async function handleManagementRequest(request: Request, env: ManagementW
   if (request.method === "OPTIONS") return empty(204, origin);
   if (request.method === "GET" && url.pathname === "/health") return response({ status: "ok", service: "management" }, 200, origin);
   if (request.method === "GET" && url.pathname === "/openapi/management-service.openapi.yaml") {
-    return new Response(managementOpenApi, { headers: { "content-type": "application/yaml; charset=utf-8", "cache-control": "public, max-age=300" } });
+    return new Response(managementOpenApi, { headers: applyCors(new Headers({
+      "content-type": "application/yaml; charset=utf-8",
+      "cache-control": "public, max-age=300",
+    }), origin) });
   }
   if (url.pathname.startsWith("/scim/v2/")) {
     try {
