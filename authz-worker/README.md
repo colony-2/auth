@@ -30,6 +30,7 @@ The repository includes the control-plane services needed to operate the gateway
 - [Management OpenAPI](openapi/management-service.openapi.yaml) is the canonical API contract used by the implementation, generated TypeScript types, contract tests, and React client.
 - [Management console](ui/) provides vocabulary, scope, identity, publishing, simulation, audit, approval, break-glass, and operational views.
 - [Project workspace demo](examples/project-workspace/) exercises the complete login-to-Cedar decision path.
+- [Composable adoption](docs/COMPOSABLE_ADOPTION.md) covers using only the services needed by an existing identity, entitlement, or policy-management system.
 
 Run the complete local stack with `npm run demo:up`, or run its seeded end-to-end evaluation suite with `npm run demo:test`. See [Operational hardening](docs/OPERATIONAL_HARDENING.md) and the [Cloudflare deployment runbook](docs/CLOUDFLARE_DEPLOYMENT.md) for production controls.
 

@@ -29,3 +29,9 @@ The default access-token lifetime is ten minutes in the example environment. Pro
 ## Claim Freshness
 
 Each login, refresh, or service-account token request obtains the current projected claims from the management service. Membership removal, binding changes, and break-glass approval therefore affect the next token. Existing signed access tokens remain valid until expiry unless the protected global policy denies an embedded state such as `suspended`.
+
+## External Entitlement Source
+
+The authentication Worker does not require this repository's management service. `MANAGEMENT_API_URL` may point to any trusted service that implements `GET /services/{serviceId}/subjects/{subjectId}/claim-preview` and returns `azv` plus compact `azs` claims. Protect it with the `MANAGEMENT_API_TOKEN` secret or a `MANAGEMENT_API` service binding.
+
+See [Composable adoption](COMPOSABLE_ADOPTION.md) for the request and response contract, supported service combinations, and existing-issuer and existing-policy-management integration paths.

@@ -6,9 +6,11 @@ import {
   Check,
   ChevronRight,
   CircleAlert,
+  CircleHelp,
   FileKey,
   FlaskConical,
   FolderKey,
+  GraduationCap,
   History,
   KeyRound,
   LogOut,
@@ -31,6 +33,14 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useSta
 
 import type { components } from "../../src/management/generated-api";
 import { loadConfig, managementClient, result } from "./api";
+import {
+  ContextGuide,
+  HelpTip,
+  HelpView,
+  NewUserTour,
+  type GuideDestination,
+  type GuideTopic,
+} from "./help";
 
 type Service = components["schemas"]["ManagedService"];
 type Vocabulary = components["schemas"]["ServiceVocabulary"];
@@ -45,7 +55,7 @@ type AuditEvent = components["schemas"]["AuditEvent"];
 type ChangeRequest = components["schemas"]["ChangeRequest"];
 type BreakGlassGrant = components["schemas"]["BreakGlassGrant"];
 type OperationsStatus = components["schemas"]["OperationsStatus"];
-type View = "overview" | "vocabulary" | "scopes" | "subjects" | "publishing" | "operations" | "audit" | "simulator";
+type View = GuideDestination;
 
 const config = loadConfig();
 
@@ -58,7 +68,15 @@ const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: "operations", label: "Operations", icon: Gauge },
   { id: "audit", label: "Audit", icon: History },
   { id: "simulator", label: "Simulator", icon: FlaskConical },
+  { id: "help", label: "Help & integration", icon: CircleHelp },
 ];
+
+const NEW_USER_MODE_KEY = "authz-console-new-user-mode";
+const TOUR_COMPLETE_KEY = "authz-console-tour-complete";
+
+function initialNewUserMode(): boolean {
+  return localStorage.getItem(NEW_USER_MODE_KEY) !== "off";
+}
 
 function defaultVocabulary(serviceId: string): Vocabulary {
   return {
@@ -93,8 +111,8 @@ function IconButton({ label, children, onClick, disabled = false, danger = false
   return <button type="button" className={`icon-button${danger ? " danger" : ""}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 
-function PageHeader({ title, detail, actions }: { title: string; detail?: string; actions?: ReactNode }) {
-  return <header className="page-header"><div><h1>{title}</h1>{detail && <p>{detail}</p>}</div><div className="page-actions">{actions}</div></header>;
+function PageHeader({ title, detail, actions, help }: { title: string; detail?: string; actions?: ReactNode; help?: string }) {
+  return <header className="page-header"><div><div className="heading-row"><h1>{title}</h1>{help && <HelpTip label={help} />}</div>{detail && <p>{detail}</p>}</div><div className="page-actions">{actions}</div></header>;
 }
 
 function Empty({ title, action }: { title: string; action?: ReactNode }) {
@@ -102,7 +120,7 @@ function Empty({ title, action }: { title: string; action?: ReactNode }) {
 }
 
 function Status({ value }: { value: string }) {
-  return <span className={`status status-${value}`}>{value}</span>;
+  return <span className={`status status-${value}`} title={`Current status: ${value}`}>{value}</span>;
 }
 
 function SignIn({ onToken }: { onToken: (token: string) => void }) {
@@ -153,6 +171,10 @@ function SignIn({ onToken }: { onToken: (token: string) => void }) {
 export function App() {
   const [token, setTokenState] = useState(() => sessionStorage.getItem("authz-console-token") ?? config.accessToken ?? "");
   const [view, setView] = useState<View>("overview");
+  const [newUserMode, setNewUserModeState] = useState(initialNewUserMode);
+  const [tourOpen, setTourOpen] = useState(() => initialNewUserMode() && localStorage.getItem(TOUR_COMPLETE_KEY) !== "true");
+  const [tourStep, setTourStep] = useState(0);
+  const [helpTopic, setHelpTopic] = useState<GuideTopic>("architecture");
   const [mobileNav, setMobileNav] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState(() => localStorage.getItem("authz-console-service") ?? "");
@@ -201,6 +223,30 @@ export function App() {
     sessionStorage.removeItem("authz-console-token");
     setTokenState("");
   }
+  function navigate(next: GuideDestination) {
+    setView(next);
+    setMobileNav(false);
+  }
+  function setNewUserMode(enabled: boolean) {
+    localStorage.setItem(NEW_USER_MODE_KEY, enabled ? "on" : "off");
+    setNewUserModeState(enabled);
+    if (!enabled) setTourOpen(false);
+  }
+  function startTour() {
+    setNewUserMode(true);
+    localStorage.removeItem(TOUR_COMPLETE_KEY);
+    setTourStep(0);
+    setTourOpen(true);
+    navigate("overview");
+  }
+  function finishTour() {
+    localStorage.setItem(TOUR_COMPLETE_KEY, "true");
+    setTourOpen(false);
+  }
+  function openHelp(topic: GuideTopic) {
+    setHelpTopic(topic);
+    navigate("help");
+  }
   if (!token) return <SignIn onToken={setToken} />;
 
   const context = { client, serviceId, selectedService, scopes, subjects, readOnly: config.readOnly, reload: load };
@@ -211,8 +257,10 @@ export function App() {
         {!services.length && <option value="">No services</option>}
         {services.map((service) => <option key={service.serviceId} value={service.serviceId}>{service.name}</option>)}
       </select></label>
-      <nav>{NAV_ITEMS.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => { setView(item.id); setMobileNav(false); }}><item.icon />{item.label}</button>)}</nav>
+      <nav>{NAV_ITEMS.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigate(item.id)}><item.icon />{item.label}</button>)}</nav>
       <div className="sidebar-footer">
+        <label className="sidebar-mode"><span><GraduationCap />New user mode</span><button type="button" role="switch" aria-checked={newUserMode} aria-label="New user mode" className={newUserMode ? "enabled" : ""} onClick={() => setNewUserMode(!newUserMode)}><span /></button></label>
+        {newUserMode && <button onClick={startTour}><GraduationCap />Restart walkthrough</button>}
         {config.readOnly && <span className="read-only"><FileKey />Read only</span>}
         <button onClick={logout}><LogOut />Sign out</button>
       </div>
@@ -220,6 +268,7 @@ export function App() {
     <main className="workspace">
       <div className="mobile-bar"><IconButton label="Open navigation" onClick={() => setMobileNav(!mobileNav)}><Menu /></IconButton><span>{selectedService?.name ?? "Authorization"}</span></div>
       {error && <div className="banner-error"><CircleAlert /><span>{error}</span><IconButton label="Dismiss" onClick={() => setError("")}><X /></IconButton></div>}
+      {newUserMode && view !== "help" && <ContextGuide destination={view} onOpen={openHelp} />}
       {loading ? <div className="loading"><RefreshCw />Loading</div> : <>
         {view === "overview" && <Overview {...context} onCreateService={() => setCreateService(true)} />}
         {view === "vocabulary" && <VocabularyView {...context} />}
@@ -229,9 +278,11 @@ export function App() {
         {view === "operations" && <OperationsView {...context} />}
         {view === "audit" && <AuditView {...context} />}
         {view === "simulator" && <SimulatorView {...context} />}
+        {view === "help" && <HelpView initialTopic={helpTopic} newUserMode={newUserMode} onNewUserMode={setNewUserMode} onStartTour={startTour} onNavigate={navigate} />}
       </>}
     </main>
     {createService && <CreateServiceModal client={client} onClose={() => setCreateService(false)} onCreated={async () => { setCreateService(false); await load(); }} />}
+    <NewUserTour open={tourOpen} step={tourStep} onStep={setTourStep} onNavigate={navigate} onClose={() => setTourOpen(false)} onFinish={finishTour} onDisable={() => setNewUserMode(false)} />
   </div>;
 }
 
@@ -246,10 +297,10 @@ type Context = {
 };
 
 function Overview({ selectedService, scopes, subjects, onCreateService, readOnly }: Context & { onCreateService: () => void }) {
-  if (!selectedService) return <><PageHeader title="Overview" actions={!readOnly && <button className="primary" onClick={onCreateService}><Plus />New service</button>} /><Empty title="No managed services" /></>;
+  if (!selectedService) return <><PageHeader title="Overview" help="A managed service defines one authorization vocabulary and one set of runtime artifacts." actions={!readOnly && <button className="primary" onClick={onCreateService}><Plus />New service</button>} /><Empty title="No managed services" /></>;
   const vocabulary = selectedService.vocabulary;
   return <>
-    <PageHeader title={selectedService.name} detail={selectedService.description ?? selectedService.serviceId} />
+    <PageHeader title={selectedService.name} detail={selectedService.description ?? selectedService.serviceId} help="This is the selected protected service. Counts summarize its current control-plane model." />
     <div className="metric-strip">
       <div><span>Scopes</span><strong>{scopes.length}</strong></div>
       <div><span>Subjects</span><strong>{subjects.length}</strong></div>
@@ -297,7 +348,7 @@ function VocabularyView({ client, selectedService, readOnly, reload }: Context) 
   const [error, setError] = useState("");
   const vocabulary = selectedService?.vocabulary;
   useEffect(() => setSource(vocabulary ? JSON.stringify(vocabulary, null, 2) : ""), [vocabulary]);
-  if (!selectedService || !vocabulary) return <><PageHeader title="Vocabulary" /><Empty title="Select a service" /></>;
+  if (!selectedService || !vocabulary) return <><PageHeader title="Vocabulary" help="The vocabulary is the set of concepts allowed for one protected service." /><Empty title="Select a service" /></>;
   const activeServiceId = selectedService.serviceId;
   const vocabularyVersion = vocabulary.version;
   async function save() {
@@ -314,26 +365,26 @@ function VocabularyView({ client, selectedService, readOnly, reload }: Context) 
     } catch (value) { setError(value instanceof Error ? value.message : "Unable to import OpenAPI"); }
   }
   return <>
-    <PageHeader title="Service vocabulary" detail={`Version ${vocabulary.version}`} actions={<>
+    <PageHeader title="Service vocabulary" detail={`Version ${vocabulary.version}`} help="Vocabulary validation prevents scopes, bindings, actions, roles, and path grants from referring to unknown concepts." actions={<>
       <button onClick={() => setImporting(true)} disabled={readOnly}><Upload />Import OpenAPI</button>
       <button className="primary" onClick={() => setEditing(true)} disabled={readOnly}><Braces />Edit JSON</button>
     </>} />
     {error && <div className="inline-error"><CircleAlert />{error}</div>}
     <div className="concept-grid">
-      <ConceptTable title="Scope types" icon={<Network />} rows={vocabulary.scopeTypes.map((value) => [value.id, value.name ?? ""])} />
-      <ConceptTable title="Resource types" icon={<Boxes />} rows={vocabulary.resourceTypes.map((value) => [value.id, value.scopeTypes?.join(", ") ?? ""])} />
-      <ConceptTable title="Path spaces" icon={<FolderKey />} rows={vocabulary.pathSpaces.map((value) => [value.id, value.anchorKind])} />
-      <ConceptTable title="Actions" icon={<Activity />} rows={vocabulary.actions.map((value) => [value.id, `${value.permissionProfile}:${value.permissionId}`])} />
-      <ConceptTable title="Roles" icon={<ShieldCheck />} rows={vocabulary.roleTemplates.map((value) => [value.id, `${value.grants.length} grants`])} />
-      <ConceptTable title="Profiles" icon={<KeyRound />} rows={vocabulary.permissionProfiles.map((value) => [value.id, value.permissions.map((permission) => permission.id).join(", ")])} />
+      <ConceptTable title="Scope types" help="Allowed container categories and the hierarchy they may form, such as organization, workspace, and project." icon={<Network />} rows={vocabulary.scopeTypes.map((value) => [value.id, value.name ?? ""])} />
+      <ConceptTable title="Resource types" help="Known object types that actions can target. OpenAPI import can derive these from operation metadata." icon={<Boxes />} rows={vocabulary.resourceTypes.map((value) => [value.id, value.scopeTypes?.join(", ") ?? ""])} />
+      <ConceptTable title="Path spaces" help="Independent hierarchical path systems. Namespaces prevent grants for files from accidentally applying to datasets." icon={<FolderKey />} rows={vocabulary.pathSpaces.map((value) => [value.id, value.anchorKind])} />
+      <ConceptTable title="Actions" help="Service operations mapped from routes to a target kind, resource type, permission profile, and permission ID." icon={<Activity />} rows={vocabulary.actions.map((value) => [value.id, `${value.permissionProfile}:${value.permissionId}`])} />
+      <ConceptTable title="Roles" help="Reusable bundles of grants. Scope bindings assign these templates to users, service accounts, or groups." icon={<ShieldCheck />} rows={vocabulary.roleTemplates.map((value) => [value.id, `${value.grants.length} grants`])} />
+      <ConceptTable title="Profiles" help="Permission catalogs that give IDs meaning for a target model, such as object:read or path:r." icon={<KeyRound />} rows={vocabulary.permissionProfiles.map((value) => [value.id, value.permissions.map((permission) => permission.id).join(", ")])} />
     </div>
     {editing && <Modal title="Edit vocabulary" onClose={() => setEditing(false)}><textarea className="code-editor" value={source} onChange={(event) => setSource(event.target.value)} rows={25} spellCheck={false} /><div className="form-actions"><button onClick={() => setEditing(false)}>Cancel</button><button className="primary" onClick={save}><Save />Save</button></div></Modal>}
     {importing && <Modal title="Import OpenAPI" onClose={() => setImporting(false)}><textarea className="code-editor" value={openApi} onChange={(event) => setOpenApi(event.target.value)} rows={22} spellCheck={false} /><div className="form-actions"><button onClick={() => setImporting(false)}>Cancel</button><button className="primary" onClick={importDocument}><Upload />Import</button></div></Modal>}
   </>;
 }
 
-function ConceptTable({ title, icon, rows }: { title: string; icon: ReactNode; rows: string[][] }) {
-  return <section className="concept-panel"><header>{icon}<h2>{title}</h2><span>{rows.length}</span></header>{rows.length ? <table><tbody>{rows.map((row) => <tr key={row[0]}><th>{row[0]}</th><td>{row[1]}</td></tr>)}</tbody></table> : <div className="muted-row">None</div>}</section>;
+function ConceptTable({ title, help, icon, rows }: { title: string; help: string; icon: ReactNode; rows: string[][] }) {
+  return <section className="concept-panel"><header>{icon}<h2>{title}</h2><HelpTip label={help} /><span>{rows.length}</span></header>{rows.length ? <table><tbody>{rows.map((row) => <tr key={row[0]}><th>{row[0]}</th><td>{row[1]}</td></tr>)}</tbody></table> : <div className="muted-row">None</div>}</section>;
 }
 
 function ScopesView(context: Context) {
@@ -342,9 +393,9 @@ function ScopesView(context: Context) {
   const [creating, setCreating] = useState(false);
   const selectedScope = scopes.find((scope) => scope.scopeId === selected);
   useEffect(() => { if (!scopes.some((scope) => scope.scopeId === selected)) setSelected(scopes[0]?.scopeId ?? ""); }, [scopes, selected]);
-  if (!selectedService) return <><PageHeader title="Scopes & access" /><Empty title="Select a service" /></>;
+  if (!selectedService) return <><PageHeader title="Scopes & access" help="Scopes contain groups, role bindings, and direct path grants." /><Empty title="Select a service" /></>;
   return <>
-    <PageHeader title="Scopes & access" detail={`${scopes.length} scopes`} actions={<button className="primary" disabled={readOnly} onClick={() => setCreating(true)}><Plus />New scope</button>} />
+    <PageHeader title="Scopes & access" detail={`${scopes.length} scopes`} help="Select a scope to inspect the entitlement state compiled into its active runtime artifact." actions={<button className="primary" disabled={readOnly} onClick={() => setCreating(true)}><Plus />New scope</button>} />
     <div className="split-view">
       <section className="list-panel"><div className="filter-box"><Search /><input placeholder="Filter scopes" aria-label="Filter scopes" /></div>
         {scopes.map((scope) => <button className={`list-row${selected === scope.scopeId ? " selected" : ""}`} key={scope.scopeId} onClick={() => setSelected(scope.scopeId)}><span><strong>{scope.name}</strong><small>{scope.scopeType} · {scope.scopeId}</small></span><ChevronRight /></button>)}
@@ -385,13 +436,13 @@ function ScopeDetail({ client, selectedService, subjects, readOnly, reload, scop
   return <>
     <div className="detail-heading"><div><span className="eyebrow">{scope.scopeType}</span><h2>{scope.name}</h2><code>{scope.scopeId}</code></div><Status value={scope.activeVersion ? "published" : "draft"} /></div>
     <div className="tabs">{(["bindings", "groups", "paths"] as const).map((value) => <button className={tab === value ? "active" : ""} onClick={() => setTab(value)} key={value}>{value}</button>)}</div>
-    {tab === "bindings" && <><div className="section-title"><h3>Bindings</h3><IconButton label="Add binding" disabled={readOnly} onClick={() => setModal("binding")}><Plus /></IconButton></div>
+    {tab === "bindings" && <><div className="section-title"><div className="heading-row"><h3>Bindings</h3><HelpTip label="Bindings assign a role template or direct permission to a subject inside this scope." /></div><IconButton label="Add binding" disabled={readOnly} onClick={() => setModal("binding")}><Plus /></IconButton></div>
       <DataTable headers={["Subject", "Grant", "Target", ""]} rows={bindings.map((binding) => [binding.subjectId, binding.roleId ?? `${binding.permissionProfile}:${binding.permissionId}`, binding.pathSpace ?? binding.resourceType ?? "scope", <IconButton label="Delete binding" danger disabled={readOnly} onClick={() => void result(client.DELETE("/scopes/{scopeId}/bindings/{bindingId}", { params: { path: { scopeId: scope.scopeId, bindingId: binding.bindingId } } })).then(done)}><Trash2 /></IconButton>])} />
     </>}
-    {tab === "groups" && <><div className="section-title"><h3>Groups</h3><IconButton label="Add group" disabled={readOnly} onClick={() => setModal("group")}><Plus /></IconButton></div>
+    {tab === "groups" && <><div className="section-title"><div className="heading-row"><h3>Groups</h3><HelpTip label="Groups are scope-local subject collections. Nested groups are expanded and cycles are rejected." /></div><IconButton label="Add group" disabled={readOnly} onClick={() => setModal("group")}><Plus /></IconButton></div>
       <DataTable headers={["Group", "Members", ""]} rows={groups.map((group) => [group.name, members.filter((member) => member.groupId === group.groupId).map((member) => member.memberId).join(", ") || "None", <span className="row-actions"><IconButton label="Add member" disabled={readOnly} onClick={() => { setTargetGroup(group.groupId); setModal("member"); }}><Users /></IconButton><IconButton label="Delete group" danger disabled={readOnly} onClick={() => void result(client.DELETE("/scopes/{scopeId}/groups/{groupId}", { params: { path: { scopeId: scope.scopeId, groupId: group.groupId } } })).then(done)}><Trash2 /></IconButton></span>])} />
     </>}
-    {tab === "paths" && <><div className="section-title"><h3>Named paths</h3><IconButton label="Add path" disabled={readOnly} onClick={() => setModal("path")}><Plus /></IconButton></div>
+    {tab === "paths" && <><div className="section-title"><div className="heading-row"><h3>Named paths</h3><HelpTip label="Named paths are reusable, service-validated prefixes referenced compactly from bindings and JWT claims." /></div><IconButton label="Add path" disabled={readOnly} onClick={() => setModal("path")}><Plus /></IconButton></div>
       <DataTable headers={["Name", "Space", "Prefix", "Permissions", ""]} rows={paths.map((path) => [path.name, path.pathSpace, <code>{path.prefix}</code>, path.permissions.join(", "), <IconButton label="Delete path" danger disabled={readOnly} onClick={() => void result(client.DELETE("/scopes/{scopeId}/path-grants/{pathGrantId}", { params: { path: { scopeId: scope.scopeId, pathGrantId: path.pathGrantId } } })).then(done)}><Trash2 /></IconButton>])} />
     </>}
     {modal === "group" && <SimpleCreate title="New group" fields={["groupId", "name"]} onClose={() => setModal(null)} onSubmit={(value) => result(client.POST("/scopes/{scopeId}/groups", { params: { path: { scopeId: scope.scopeId } }, body: { groupId: value.groupId!, name: value.name! } })).then(done)} />}
@@ -432,7 +483,7 @@ function MemberModal({ client, scope, groupId, subjects, groups, onClose, onCrea
 function SubjectsView({ client, serviceId, subjects, readOnly, reload }: Context) {
   const [creating, setCreating] = useState(false); const [preview, setPreview] = useState<{ subject: Subject; claims: string[] }>();
   async function showPreview(subject: Subject) { const value = await result(client.GET("/services/{serviceId}/subjects/{subjectId}/claim-preview", { params: { path: { serviceId, subjectId: subject.subjectId } } })); setPreview({ subject, claims: value.azs }); }
-  return <><PageHeader title="Subjects" detail={`${subjects.length} users and service accounts`} actions={<button className="primary" disabled={readOnly} onClick={() => setCreating(true)}><Plus />New subject</button>} />
+  return <><PageHeader title="Subjects" detail={`${subjects.length} users and service accounts`} help="Claim preview resolves direct and group-derived entitlements into the compact azs entries used by authn." actions={<button className="primary" disabled={readOnly} onClick={() => setCreating(true)}><Plus />New subject</button>} />
     <DataTable headers={["Subject", "Kind", "Status", "Claims"]} rows={subjects.map((subject) => [<span><strong>{subject.displayName}</strong><small>{subject.subjectId}</small></span>, subject.kind, <Status value={subject.status} />, <button onClick={() => void showPreview(subject)}><Braces />Preview</button>])} />
     {creating && <SubjectModal client={client} onClose={() => setCreating(false)} onCreated={async () => { setCreating(false); await reload(); }} />}
     {preview && <Modal title={preview.subject.displayName} onClose={() => setPreview(undefined)}>{preview.claims.length ? <pre className="claim-preview">{JSON.stringify({ azv: 1, azs: preview.claims }, null, 2)}</pre> : <Empty title="No effective claims" />}</Modal>}
@@ -490,7 +541,7 @@ function PublishingView({ client, selectedService, scopes, readOnly, reload }: C
     } catch (value) { setError(value instanceof Error ? value.message : "Unable to review change"); }
     finally { setPending(false); }
   }
-  return <><PageHeader title="Publishing" detail="Reviewed immutable runtime artifact versions" />
+  return <><PageHeader title="Publishing" detail="Reviewed immutable runtime artifact versions" help="Publication validates the current draft, writes immutable R2 objects, advances a manifest, and invalidates runtime caches." />
     {error && <div className="inline-error"><CircleAlert />{error}</div>}
     <section className="content-section"><div className="section-title"><h2>Review queue</h2></div>
       <DataTable headers={["Target", "Status", "Impact", "Requested by", ""]} rows={changes.map((change) => [
@@ -543,7 +594,7 @@ function OperationsView(context: Context) {
     catch (value) { setError(value instanceof Error ? value.message : "Projection rebuild failed"); }
     finally { setPending(false); }
   }
-  return <><PageHeader title="Operations" detail="Emergency access, projections, and artifact distribution" actions={<>
+  return <><PageHeader title="Operations" detail="Emergency access, projections, and artifact distribution" help="Monitor claim projection freshness, reviewed changes, break-glass access, and R2 replica outcomes." actions={<>
     <button disabled={pending || readOnly} onClick={() => void rebuild()}><RefreshCw />Rebuild projections</button>
     <button className="primary" disabled={readOnly || !selectedService} onClick={() => setCreating(true)}><Siren />Request break-glass</button>
   </>} />
@@ -601,11 +652,11 @@ function AuditView({ client, serviceId }: Context) {
   const [events, setEvents] = useState<AuditEvent[]>([]); const [query, setQuery] = useState("");
   useEffect(() => { void result(client.GET("/audit-events", { params: { query: { serviceId } } })).then((value) => setEvents(value.items)); }, [client, serviceId]);
   const filtered = events.filter((event) => `${event.action} ${event.actorId} ${event.targetId}`.toLowerCase().includes(query.toLowerCase()));
-  return <><PageHeader title="Audit" detail={`${events.length} recent events`} /><div className="filter-box page-filter"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter audit events" /></div><DataTable headers={["Time", "Action", "Actor", "Target"]} rows={filtered.map((event) => [new Date(event.createdAt).toLocaleString(), <code>{event.action}</code>, event.actorId, `${event.targetType}:${event.targetId}`])} /></>;
+  return <><PageHeader title="Audit" detail={`${events.length} recent events`} help="Audit records identify the actor, action, target, service, scope, and mutation detail for control-plane changes." /><div className="filter-box page-filter"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter audit events" /></div><DataTable headers={["Time", "Action", "Actor", "Target"]} rows={filtered.map((event) => [new Date(event.createdAt).toLocaleString(), <code>{event.action}</code>, event.actorId, `${event.targetType}:${event.targetId}`])} /></>;
 }
 
 function SimulatorView({ client, serviceId, scopes, subjects, selectedService }: Context) {
   const [scopeId, setScopeId] = useState(scopes[0]?.scopeId ?? ""); const [subjectId, setSubjectId] = useState(subjects[0]?.subjectId ?? ""); const [actionId, setActionId] = useState(selectedService?.vocabulary.actions[0]?.id ?? ""); const [path, setPath] = useState(""); const [simulation, setSimulation] = useState<components["schemas"]["SimulationResult"]>();
   async function submit(event: FormEvent) { event.preventDefault(); setSimulation(await result(client.POST("/simulations", { body: { serviceId, scopeId, subjectId, actionId, ...(path ? { path } : {}) } }))); }
-  return <><PageHeader title="Authorization simulator" /><div className="simulator-grid"><form className="form-grid simulator-form" onSubmit={submit}><label>Subject<select value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>{subjects.map((value) => <option key={value.subjectId} value={value.subjectId}>{value.displayName}</option>)}</select></label><label>Scope<select value={scopeId} onChange={(event) => setScopeId(event.target.value)}>{scopes.map((value) => <option key={value.scopeId} value={value.scopeId}>{value.name}</option>)}</select></label><label>Action<select value={actionId} onChange={(event) => setActionId(event.target.value)}>{selectedService?.vocabulary.actions.map((value) => <option key={value.id} value={value.id}>{value.id}</option>)}</select></label><label>Path<input value={path} onChange={(event) => setPath(event.target.value)} placeholder="shared/docs/report.pdf" /></label><button className="primary"><FlaskConical />Evaluate</button></form><section className={`simulation-result ${simulation?.decision ?? "idle"}`}>{simulation ? <><div>{simulation.decision === "allow" ? <ShieldCheck /> : <CircleAlert />}<strong>{simulation.decision}</strong></div><p>{simulation.reasons.join(" · ")}</p>{simulation.matchedBindingIds.length > 0 && <code>{simulation.matchedBindingIds.join(", ")}</code>}</> : <span>Select an action and evaluate</span>}</section></div></>;
+  return <><PageHeader title="Authorization simulator" help="Simulation resolves current bindings against one vocabulary action without sending a request to the protected upstream." /><div className="simulator-grid"><form className="form-grid simulator-form" onSubmit={submit}><label>Subject<select value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>{subjects.map((value) => <option key={value.subjectId} value={value.subjectId}>{value.displayName}</option>)}</select></label><label>Scope<select value={scopeId} onChange={(event) => setScopeId(event.target.value)}>{scopes.map((value) => <option key={value.scopeId} value={value.scopeId}>{value.name}</option>)}</select></label><label>Action<select value={actionId} onChange={(event) => setActionId(event.target.value)}>{selectedService?.vocabulary.actions.map((value) => <option key={value.id} value={value.id}>{value.id}</option>)}</select></label><label>Path<input value={path} onChange={(event) => setPath(event.target.value)} placeholder="shared/docs/report.pdf" /></label><button className="primary"><FlaskConical />Evaluate</button></form><section className={`simulation-result ${simulation?.decision ?? "idle"}`}>{simulation ? <><div>{simulation.decision === "allow" ? <ShieldCheck /> : <CircleAlert />}<strong>{simulation.decision}</strong></div><p>{simulation.reasons.join(" · ")}</p>{simulation.matchedBindingIds.length > 0 && <code>{simulation.matchedBindingIds.join(", ")}</code>}</> : <span>Select an action and evaluate</span>}</section></div></>;
 }

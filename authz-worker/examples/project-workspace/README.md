@@ -11,6 +11,8 @@ npm run demo:up
 The command applies local D1 migrations, generates an ephemeral ES256 key, starts all Workers and the React console, seeds and publishes the project-workspace model, then prints the service URLs.
 It also writes ignored `.dev.vars.authn`, `.dev.vars.management`, and `.dev.vars.gateway` files containing local-only credentials.
 
+Open `http://127.0.0.1:5173` and leave **New user mode** enabled for contextual guidance. The walkthrough moves through vocabulary, scopes and bindings, compact claim preview, simulation, publication, and the Help section. Help also covers architecture, configuration, proxy and embedded integration, and adopting only a subset of the services.
+
 Run the self-contained behavior suite:
 
 ```bash

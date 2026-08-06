@@ -33,4 +33,6 @@ See [Operational hardening](OPERATIONAL_HARDENING.md) for approval, emergency ac
 
 The console in `ui/` is a replaceable OpenAPI client. It supports service vocabulary, scopes, identities, bindings, path grants, claim previews, simulations, publication review, audit, break-glass, and operational status. Configure its API URL at build time with `VITE_MANAGEMENT_API_BASE_URL`; pass user authentication to the management gateway rather than embedding server secrets.
 
+New-user mode adds contextual guidance and a restartable walkthrough and can be disabled persistently from the sidebar. The Help section includes the system diagram, concept glossary, demo guide, proxy and embedded integration, partial-service adoption, external entitlement contract, configuration reference, and troubleshooting guidance.
+
 Run it locally with `npm run dev:management-ui` or build static assets with `npm run build:management-ui`.

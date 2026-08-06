@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../ui/src/App";
@@ -27,6 +27,7 @@ function requestUrl(input: RequestInfo | URL): string {
 describe("management UI", () => {
   beforeEach(() => {
     sessionStorage.setItem("authz-console-token", "test-token");
+    localStorage.setItem("authz-console-tour-complete", "true");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = requestUrl(input);
       if (url.endsWith("/services")) return Response.json({ items: [{ serviceId: "projects-api", name: "Projects API", vocabulary, activeServiceVersion: "svc-1", createdAt: vocabulary.updatedAt, updatedAt: vocabulary.updatedAt }] });
@@ -53,6 +54,8 @@ describe("management UI", () => {
     expect(await screen.findByRole("heading", { name: "Service vocabulary" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Scope types" })).toBeInTheDocument();
     expect(screen.getByText("readProject")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Help: Allowed container categories/ }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("organization, workspace, and project");
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 
@@ -71,5 +74,40 @@ describe("management UI", () => {
     expect(await screen.findByRole("heading", { name: "Operations" })).toBeInTheDocument();
     expect(screen.getByText("Dirty projections").parentElement).toHaveTextContent("2");
     expect(screen.getByRole("heading", { name: "Break-glass grants" })).toBeInTheDocument();
+  });
+
+  it("walks a new user through real views and persists disabled learning aids", async () => {
+    localStorage.removeItem("authz-console-tour-complete");
+    localStorage.removeItem("authz-console-new-user-mode");
+    render(<App />);
+    await screen.findByRole("heading", { name: "Projects API" });
+    const tour = screen.getByLabelText("New user walkthrough");
+    expect(tour).toHaveTextContent("Three services, one decision path");
+    fireEvent.click(within(tour).getByRole("button", { name: "Next step" }));
+    expect(await screen.findByRole("heading", { name: "Service vocabulary" })).toBeInTheDocument();
+
+    const mode = screen.getByRole("switch", { name: "New user mode" });
+    expect(mode).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(mode);
+    expect(screen.queryByLabelText("New user walkthrough")).not.toBeInTheDocument();
+    expect(localStorage.getItem("authz-console-new-user-mode")).toBe("off");
+
+    cleanup();
+    render(<App />);
+    expect(screen.getByRole("switch", { name: "New user mode" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByText("Start with the service boundary")).not.toBeInTheDocument();
+  });
+
+  it("documents architecture and partial adoption with external entitlements", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Projects API" });
+    fireEvent.click(screen.getByRole("button", { name: "Help & integration" }));
+    expect(await screen.findByRole("heading", { name: "How a request becomes a Cedar decision" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Client authenticates with authn/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Integration Adopt all or part/ }));
+    expect(screen.getByRole("heading", { name: "Choose the services your system needs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Authn + authorization" })).toBeInTheDocument();
+    expect(screen.getByText("MANAGEMENT_API_URL")).toBeInTheDocument();
+    expect(screen.getByText(/GET \{MANAGEMENT_API_URL\}\/services/)).toBeInTheDocument();
   });
 });
