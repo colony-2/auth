@@ -32,6 +32,16 @@ The repository includes the control-plane services needed to operate the gateway
 - [Project workspace demo](examples/project-workspace/) exercises the complete login-to-Cedar decision path.
 - [Composable adoption](docs/COMPOSABLE_ADOPTION.md) covers using only the services needed by an existing identity, entitlement, or policy-management system.
 
+Planning documents describe proposed work, not shipped features. [c2a platform architecture](docs/C2A_PLATFORM_ARCHITECTURE.md) defines the intended direction: external identity and entitlement ownership, reusable issuance and enforcement, and optional managed services. The alternative assessments retain the rationale behind that direction.
+
+- [c2a evaluation](docs/C2A_EVALUATION.md) assesses the product thesis, existing alternatives, adoption prospects, and scope under the no-user-store and minimal-infrastructure constraints.
+- [Auth stack recommendation](docs/AUTH_STACK_RECOMMENDATION.md) selects permissively licensed components and compares c2a with completing the applications' existing security implementations.
+- [Grant management options](docs/GRANT_MANAGEMENT_OPTIONS.md) compares Authelia companions, shared grant administration, and S3/R2 policy distribution without a c2a user directory.
+- [SCIM and component boundaries](docs/SCIM_AND_COMPONENT_BOUNDARIES.md) separates Authelia login, external identity provisioning, and shared authorization APIs behind product-specific UIs.
+- [c2a platform architecture](docs/C2A_PLATFORM_ARCHITECTURE.md) defines external identity and entitlement contracts, shared enforcement, attenuable capabilities, and full adoption by the Colony projects.
+- [Production readiness plan](docs/PRODUCTION_READINESS_PLAN.md) proposes the remaining deployment, login, local-token, and embedded Go SDK work.
+- [Project adoption plan](docs/PROJECT_ADOPTION_PLAN.md) maps the integration to JobDB, Gitvend, and Cortex using reviewed repository snapshots.
+
 Run the complete local stack with `npm run demo:up`, or run its seeded end-to-end evaluation suite with `npm run demo:test`. See [Operational hardening](docs/OPERATIONAL_HARDENING.md) and the [Cloudflare deployment runbook](docs/CLOUDFLARE_DEPLOYMENT.md) for production controls.
 
 ## Core Model
