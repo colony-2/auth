@@ -11,3 +11,7 @@ coverage/
 .env.*
 !.env.example
 
+# Local editor state and optional upstream reference clones
+/.idea/
+/cedar/
+/cedar-integration-tests/

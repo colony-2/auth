@@ -30,7 +30,7 @@ export interface WorkerEnv extends AuthzProxyEnv {
 export default createAuthzProxy<WorkerEnv>();
 ```
 
-Reference entrypoint: [index.ts](/src/authz-worker/src/index.ts)
+Reference entrypoint: [index.ts](src/index.ts)
 
 This does the following:
 

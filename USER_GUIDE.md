@@ -4,10 +4,10 @@ This guide explains how to run the worker locally, seed service and scope config
 
 ## Quick Start
 
-From [authz-worker](/src/authz-worker):
+From the repository root:
 
 ```bash
-cd /src/authz-worker
+cd /path/to/c2a
 npm install
 npm run test:integration
 ```
@@ -18,7 +18,7 @@ If you want to drive the worker manually, follow the rest of this guide.
 
 ## Local Defaults
 
-[wrangler.jsonc](/src/authz-worker/wrangler.jsonc) defines:
+[wrangler.jsonc](wrangler.jsonc) defines:
 
 - `SERVICE_IDENTIFIER=projects-api`
 - `JWKS_URL=https://issuer.example.com/.well-known/jwks.json`
@@ -93,7 +93,7 @@ EOF
 ## Step 2: Start the Worker
 
 ```bash
-cd /src/authz-worker
+cd /path/to/c2a
 npm run dev
 ```
 
@@ -454,7 +454,7 @@ The authz worker is read-only, so immediate cache invalidation must also happen 
 
 ## Embedded Mode
 
-See [src/embedded-example.ts](/src/authz-worker/src/embedded-example.ts).
+See [src/embedded-example.ts](src/embedded-example.ts).
 
 The wrapped handler receives:
 

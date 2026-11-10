@@ -9,7 +9,7 @@
 - compact JWT scope claims
 - a service auth descriptor compiled from OpenAPI
 
-It follows the Cedar runtime path from [CEDAR_CLOUDFLARE_HANDOFF.md](/src/CEDAR_CLOUDFLARE_HANDOFF.md): explicit wasm import, `initSync({ module })`, `preparsePolicySet()`, optional `preparseSchema()`, and `statefulIsAuthorized()` on the hot path.
+It follows the Cedar runtime path from [CEDAR_CLOUDFLARE_HANDOFF.md](CEDAR_CLOUDFLARE_HANDOFF.md): explicit wasm import, `initSync({ module })`, `preparsePolicySet()`, optional `preparseSchema()`, and `statefulIsAuthorized()` on the hot path.
 
 The package supports:
 
@@ -221,7 +221,7 @@ Supported resolver types:
 - `body_json`
 - `body_regex`
 
-The default local config in [wrangler.jsonc](/src/authz-worker/wrangler.jsonc) checks:
+The default local config in [wrangler.jsonc](wrangler.jsonc) checks:
 
 1. `x-scope-id`
 2. JSON body `/scopeId`
@@ -270,7 +270,7 @@ This is how a single service can support multiple path systems cleanly:
 
 ### Proxy Mode
 
-[src/index.ts](/src/authz-worker/src/index.ts) exports `createAuthzProxy()`.
+[src/index.ts](src/index.ts) exports `createAuthzProxy()`.
 
 Allowed requests are proxied to `UPSTREAM_ORIGIN`. The worker injects headers such as:
 
@@ -291,7 +291,7 @@ Allowed requests are proxied to `UPSTREAM_ORIGIN`. The worker injects headers su
 
 ### Embedded Mode
 
-[src/embedded-example.ts](/src/authz-worker/src/embedded-example.ts) shows `withAuthorization()`.
+[src/embedded-example.ts](src/embedded-example.ts) shows `withAuthorization()`.
 
 Allowed requests continue to the wrapped handler with a `decision` object. Unresolved routes pass `decision = null`.
 
@@ -299,15 +299,15 @@ Allowed requests continue to the wrapped handler with a `decision` object. Unres
 
 There are two intended integration modes:
 
-- [INTERNAL_INTEGRATION_GUIDE.md](/src/authz-worker/INTERNAL_INTEGRATION_GUIDE.md): embed authz as a library inside an existing Worker
-- [EXTERNAL_INTEGRATION_GUIDE.md](/src/authz-worker/EXTERNAL_INTEGRATION_GUIDE.md): front an external HTTP service with the authz proxy
-- [C2A_CLI_PROPOSAL.md](/src/authz-worker/C2A_CLI_PROPOSAL.md): proposed Go + Cobra CLI for config, JWT, policy, evaluation, and publish workflows
+- [INTERNAL_INTEGRATION_GUIDE.md](INTERNAL_INTEGRATION_GUIDE.md): embed authz as a library inside an existing Worker
+- [EXTERNAL_INTEGRATION_GUIDE.md](EXTERNAL_INTEGRATION_GUIDE.md): front an external HTTP service with the authz proxy
+- [C2A_CLI_PROPOSAL.md](C2A_CLI_PROPOSAL.md): proposed Go + Cobra CLI for config, JWT, policy, evaluation, and publish workflows
 
 ## Design Docs
 
-- [AUTHZ_DOMAIN_MODEL.md](/src/authz-worker/AUTHZ_DOMAIN_MODEL.md): opinionated model for scopes, permissions, roles, groups, bindings, and path spaces
-- [AUTHN_MANAGEMENT_SERVICE_PROPOSAL.md](/src/authz-worker/AUTHN_MANAGEMENT_SERVICE_PROPOSAL.md): initial proposal for companion authentication and management services
-- [cloudflare-worker-authz-gateway-proposal.md](/src/cloudflare-worker-authz-gateway-proposal.md): broader gateway proposal and implementation direction
+- [AUTHZ_DOMAIN_MODEL.md](AUTHZ_DOMAIN_MODEL.md): opinionated model for scopes, permissions, roles, groups, bindings, and path spaces
+- [AUTHN_MANAGEMENT_SERVICE_PROPOSAL.md](AUTHN_MANAGEMENT_SERVICE_PROPOSAL.md): initial proposal for companion authentication and management services
+- [cloudflare-worker-authz-gateway-proposal.md](cloudflare-worker-authz-gateway-proposal.md): broader gateway proposal and implementation direction
 
 ## R2 Layout
 
@@ -362,7 +362,7 @@ That keeps the embedded library API typed and avoids JSON env blobs except where
 
 ## Local Development
 
-Commands from [package.json](/src/authz-worker/package.json):
+Commands from [package.json](package.json):
 
 - `npm run demo:up`: start, migrate, seed, and print URLs for the full local system
 - `npm run demo:test`: run the seeded end-to-end behavior suite and stop the stack
@@ -373,7 +373,7 @@ Commands from [package.json](/src/authz-worker/package.json):
 - `npm run deploy:cloudflare:dry-run -- --env staging`
 - `npm run typecheck && npm run typecheck:ui`
 
-The integration harness in [scripts/test-worker.mjs](/src/authz-worker/scripts/test-worker.mjs) covers:
+The integration harness in [scripts/test-worker.mjs](scripts/test-worker.mjs) covers:
 
 - scope resolution from header, JSON body, text body, and path
 - compact `azs` scope claims
@@ -385,15 +385,15 @@ The integration harness in [scripts/test-worker.mjs](/src/authz-worker/scripts/t
 
 ## Package Layout
 
-- [src/lib.ts](/src/authz-worker/src/lib.ts): core runtime
-- [src/index.ts](/src/authz-worker/src/index.ts): proxy entrypoint
-- [src/embedded-example.ts](/src/authz-worker/src/embedded-example.ts): embedded example
-- [scripts/test-worker.mjs](/src/authz-worker/scripts/test-worker.mjs): integration harness
-- [COOKBOOK.md](/src/authz-worker/COOKBOOK.md): concrete policy and claim examples
-- [USER_GUIDE.md](/src/authz-worker/USER_GUIDE.md): local usage guide
-- [INTERNAL_INTEGRATION_GUIDE.md](/src/authz-worker/INTERNAL_INTEGRATION_GUIDE.md): embedded/library integration
-- [EXTERNAL_INTEGRATION_GUIDE.md](/src/authz-worker/EXTERNAL_INTEGRATION_GUIDE.md): proxy/front-door integration
-- [UPDATED_IMPLEMENTATION_PLAN.md](/src/authz-worker/UPDATED_IMPLEMENTATION_PLAN.md): current plan/state
+- [src/lib.ts](src/lib.ts): core runtime
+- [src/index.ts](src/index.ts): proxy entrypoint
+- [src/embedded-example.ts](src/embedded-example.ts): embedded example
+- [scripts/test-worker.mjs](scripts/test-worker.mjs): integration harness
+- [COOKBOOK.md](COOKBOOK.md): concrete policy and claim examples
+- [USER_GUIDE.md](USER_GUIDE.md): local usage guide
+- [INTERNAL_INTEGRATION_GUIDE.md](INTERNAL_INTEGRATION_GUIDE.md): embedded/library integration
+- [EXTERNAL_INTEGRATION_GUIDE.md](EXTERNAL_INTEGRATION_GUIDE.md): proxy/front-door integration
+- [UPDATED_IMPLEMENTATION_PLAN.md](UPDATED_IMPLEMENTATION_PLAN.md): current plan/state
 
 ## Current Limits
 

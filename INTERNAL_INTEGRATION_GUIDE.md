@@ -68,7 +68,7 @@ What this does:
 - protected deny decisions return `403` before your handler runs
 - unresolved routes call your handler with `decision = null`
 
-Reference example: [embedded-example.ts](/src/authz-worker/src/embedded-example.ts)
+Reference example: [embedded-example.ts](src/embedded-example.ts)
 
 ## Typical Real Integration
 
